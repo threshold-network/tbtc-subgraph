@@ -283,28 +283,6 @@ export function handleRelayEntryRequested(event: RelayEntryRequested): void {
 
 }
 
-export function handleRelayEntrySubmitted(event: RelayEntrySubmitted): void {
-    // let status = getStatus();
-    let entry = RelayEntry.load(event.params.requestId.toString())!
-    entry.value = event.params.entry
-    entry.submittedAt = event.block.timestamp
-    entry.isInProgress = false
-    entry.submitter = event.params.submitter
-    entry.save()
-
-    let randomContract = RandomBeacon.bind(event.address)
-    let group = RandomBeaconGroup.load(entry.group)!
-    let memberships = group.memberships
-    for (let i = 0; i < memberships.length; i++) {
-        let membership = RandomBeaconGroupMembership.load(memberships[i])!
-        let availableReward = randomContract.availableRewards(Address.fromString(membership.operator))
-        let operator = getOrCreateOperator(Address.fromString(membership.operator))
-        operator.availableReward = availableReward
-        operator.save()
-    }
-
-}
-
 export function handleRelayEntryTimedOut(event: RelayEntryTimedOut): void {
     let groupPubKey = GroupPublicKey.load(event.params.terminatedGroupId.toString())
     if (groupPubKey) {
@@ -349,7 +327,6 @@ export function handleRelayEntryTimeoutSlashed(
 
     slashOperators(event.params.groupMembers, event.params.slashingAmount, event)
 }
-
 
 export function handleRelayEntryDelaySlashed(
     event: RelayEntryDelaySlashed

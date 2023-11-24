@@ -27,10 +27,36 @@
     "SortitionPool": {
       "address": "0x3FC63cDBC1fc82F6aDb82d3dEAF7c31723961540",
       "startBlock": 8364710
+    }
+  },
+  "sepolia": {
+    "Bridge": {
+      "address": "0x9b1a7fE5a16A15F2f9475C5B231750598b113403",
+      "startBlock": 4553028
     },
-    "SimplePREApplication": {
-      "address": "0x829fdCDf6Be747FEA37518fBd83dF70EE371fCf2",
-      "startBlock": 8364954
+    "TBTCVault": {
+      "address": "0xB5679dE944A79732A75CE556191DF11F489448d5",
+      "startBlock": 4553069
+    },
+    "TBTC": {
+      "address": "0x517f2982701695D4E52f1ECFBEf3ba31Df470161",
+      "startBlock": 4553001
+    },
+    "RandomBeacon": {
+      "address": "0x02CBA6D77CF9fB019e322c55b34c9d42f2eF4D74",
+      "startBlock": 4507403
+    },
+    "WalletRegistry": {
+      "address": "0x2DfC89675AB5Fb5Be7c2A86d373Daac3E795fc25",
+      "startBlock": 4507506
+    },
+    "TokenStaking": {
+      "address": "0xa07f4E37C2E7089Ea3AFffbe51A6A281833a4D14",
+      "startBlock": 4272679
+    },
+    "SortitionPool": {
+      "address": "0xd636B635630c42A474858b877ea2324AFdE796d2",
+      "startBlock": 4507392
     }
   },
   "mainnet": {
@@ -61,10 +87,6 @@
     "SortitionPool": {
       "address": "0x4e4cBA3779d56386ED43631b4dCD6d8EacEcBCF6",
       "startBlock": 15638881
-    },
-    "SimplePREApplication": {
-      "address": "0x7e01c9c03fd3737294dbd7630a34845b0f70e5dd",
-      "startBlock": 14141140
     }
   }
 }
