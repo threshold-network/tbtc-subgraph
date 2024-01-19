@@ -146,10 +146,9 @@ export function handleOptimisticMintingRequested(
 
 
 export function handleMinted(event: Minted): void {
-    let contract = TBTC.bind(Const.TBTCToken)
     let tBtcToken = getOrCreateTbtcToken()
     tBtcToken.totalMint = tBtcToken.totalMint.plus(event.params.amount)
-    tBtcToken.totalSupply = contract.totalSupply()
+    tBtcToken.totalSupply = tBtcToken.totalSupply.plus(event.params.amount)
     tBtcToken.save()
 
     //Reset lastMintedInfo when handle diff transaction
@@ -177,10 +176,9 @@ export function handleMinted(event: Minted): void {
 }
 
 export function handlerUnminted(event: Unminted): void {
-    let contract = TBTC.bind(Const.TBTCToken)
     let tBtcToken = getOrCreateTbtcToken()
     tBtcToken.totalBurn = tBtcToken.totalBurn.plus(event.params.amount)
-    tBtcToken.totalSupply = contract.totalSupply()
+    tBtcToken.totalSupply = tBtcToken.totalSupply.minus(event.params.amount)
     tBtcToken.save()
 }
 
