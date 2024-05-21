@@ -1,5 +1,23 @@
 import {BigInt, ByteArray, Bytes, crypto, ethereum} from '@graphprotocol/graph-ts'
 import {final, init, update} from "./crypto";
+import { getOrCreateRedemption } from './helper';
+import * as Const from './constants';
+
+export function reformatRedemptionKeyIfExists(redeemerOutputScript: Bytes, walletPubKeyHash: Bytes): string {
+    let loop = true
+    let count = Const.ZERO_BI
+    let id = ""
+    while (loop) {
+        id = calculateRedemptionKey(redeemerOutputScript, walletPubKeyHash, count)
+        let redemption = getOrCreateRedemption(id)
+        if (redemption.updateTimestamp.notEqual(Const.ZERO_BI)) {
+            count = count.plus(Const.ONE_BI)
+        } else {
+            loop = false
+        }
+    }
+    return id
+}
 
 /** Calculates deposit key the same way as the Bridge contract.
  The deposit key is computed as
@@ -46,6 +64,11 @@ export function calculateRedemptionKeyByScriptHash(scriptHash: ByteArray, wallet
     return crypto.keccak256(Bytes.fromUint8Array(data)).toHexString().concat("-").concat(count.toString());
 }
 
+export function calculateRedemptionKeyByBigInt(redemptionKey: BigInt, count: BigInt): string {
+    const redemptionKeyInHexString = bigIntToHex(redemptionKey);
+    return redemptionKeyInHexString.concat("-").concat(count.toString());
+}
+
 export function keccak256TwoString(first: string, second: string): string {
     let hashData = Bytes.fromHexString(first).concat(Bytes.fromHexString(second));
     return crypto.keccak256(hashData).toHexString();
@@ -82,6 +105,32 @@ export function hexToBigint(hex: string): BigInt {
     }
     return bigint;
 }
+
+export function bigIntToHex(bigInt: BigInt, paddingLength: i32 = 64): string {
+        const zero = BigInt.fromI32(0);
+        if (bigInt.equals(zero)) {
+            return "0x" + "0".repeat(paddingLength);
+        }
+    
+        let hex = '';
+        while (bigInt.gt(zero)) {
+            let digit = bigInt.mod(BigInt.fromI32(16));
+            bigInt = bigInt.div(BigInt.fromI32(16));
+    
+            if (digit.ge(zero) && digit.le(BigInt.fromI32(9))) {
+                hex = String.fromCharCode(digit.toI32() + 48) + hex;
+            } else {
+                hex = String.fromCharCode(digit.toI32() + 87) + hex; // Adding 87 for 'a'-'f'
+            }
+        }
+    
+        // Pad with zeros if the hex string is shorter than the specified length
+        if (hex.length < paddingLength) {
+            hex = "0".repeat(paddingLength - hex.length) + hex;
+        }
+    
+        return '0x' + hex;
+    }
 
 export function toHexString(bin: Uint8Array): string {
     let bin_len = bin.length;

@@ -43,6 +43,7 @@ import {
     getOrCreateTbtcToken,
     getOrCreateTransaction,
     getOrCreateUser,
+    getStats,
     getStatus
 } from "./utils/helper"
 import * as Utils from "./utils/utils"
@@ -76,7 +77,7 @@ export function handleDepositRevealed(event: DepositRevealed): void {
     let bridgeContract = Bridge.bind(event.address)
     let depositsContract = bridgeContract.deposits(Utils.hexToBigint(id.toHexString()))
 
-    let deposit = getOrCreateDeposit(Bytes.fromByteArray(id))
+    let deposit = getOrCreateDeposit(Bytes.fromByteArray(id))    
     deposit.status = "REVEALED"
     deposit.user = event.params.depositor
     deposit.amount = event.params.amount
@@ -95,6 +96,9 @@ export function handleDepositRevealed(event: DepositRevealed): void {
     deposit.updateTimestamp = event.block.timestamp
     deposit.save()
 
+    let stats = getStats()
+    stats.numDeposits += 1
+    stats.save()
 
     let user = getOrCreateUser(event.params.depositor)
     let tBtcToken = getOrCreateTbtcToken()
@@ -203,13 +207,21 @@ function reformatRedemptionKeyIfExists(redeemerOutputScript: Bytes, walletPubKey
     return id
 }
 
-function getLastRedemptionKey(redeemerOutputScript: Bytes, walletPubKeyHash: Bytes): string {
+function getLastRedemptionKey(
+    redeemerOutputScript: Bytes, 
+    walletPubKeyHash: Bytes, 
+    calculateByScriptHash: boolean
+): string {
     let loop = true
     let count = Const.ZERO_BI
     let id = ""
     let lastId = ""
     while (loop) {
-        id = Utils.calculateRedemptionKeyByScriptHash(redeemerOutputScript, walletPubKeyHash, count)
+        if (calculateByScriptHash) {
+            id = Utils.calculateRedemptionKeyByScriptHash(redeemerOutputScript, walletPubKeyHash, count)  
+        } else {
+            id = Utils.calculateRedemptionKey(redeemerOutputScript, walletPubKeyHash, count)
+        }
         let redemption = getOrCreateRedemption(id)
         if (redemption.updateTimestamp.notEqual(Const.ZERO_BI)) {
             count = count.plus(Const.ONE_BI)
@@ -253,6 +265,10 @@ export function handleRedemptionRequested(event: RedemptionRequested): void {
     transactions.push(transaction.id)
     redemption.transactions = transactions
     redemption.save()
+
+    let stats = getStats()
+    stats.numRedemptions += 1
+    stats.save()
 }
 
 export function handleRedemptionTimedOut(event: RedemptionTimedOut): void {
@@ -267,8 +283,7 @@ export function handleRedemptionTimedOut(event: RedemptionTimedOut): void {
     transaction.description = "Redemption TimedOut"
     transaction.save()
 
-    // keccak256(keccak256(redeemerOutputScript) | walletPubKeyHash)
-    let id = reformatRedemptionKeyIfExists(redeemerOutputScript, walletPubKeyHash)
+    let id = getLastRedemptionKey(redeemerOutputScript, walletPubKeyHash, false)
     let redemption = getOrCreateRedemption(id)
     redemption.status = "TIMEDOUT"
     redemption.updateTimestamp = event.block.timestamp
@@ -301,7 +316,7 @@ export function callHandlerSubmitRedemptionProof(call: SubmitRedemptionProofCall
         let outputScriptStart = outputStartingIndex.plus(BigInt.fromI32(8));
         let outputScript = calculateOutputScriptHash(Utils.bytesToUint8Array(outputVector), outputScriptStart.toI32(), scriptLength.toI32())
 
-        let redemptionKey = getLastRedemptionKey(Bytes.fromByteArray(outputScript), call.inputs.walletPubKeyHash)
+        let redemptionKey = getLastRedemptionKey(Bytes.fromByteArray(outputScript), call.inputs.walletPubKeyHash, true)
 
         let redemption = getOrCreateRedemption(redemptionKey);
         //Check if redemption exist

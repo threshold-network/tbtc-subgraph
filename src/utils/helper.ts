@@ -33,6 +33,7 @@ export function getOrCreateUser(id: Bytes): User {
         user.tokenBalance = constants.ZERO_BI
         user.totalTokensHeld = constants.ZERO_BI
         user.tbtcToken = getOrCreateTbtcToken().id
+        user.isRedeemerBanned = false
         user.deposits = []
     }
     return user
@@ -106,6 +107,8 @@ export function getStats(): StatsRecord {
     if (stats == null) {
         stats = new StatsRecord("current")
         stats.numOperators = 0
+        stats.numDeposits = 0
+        stats.numRedemptions = 0
         stats.totalTBTCAuthorizedAmount = constants.ZERO_BI
         stats.totalRandomBeaconAuthorizedAmount = constants.ZERO_BI
         stats.numOperatorsRegisteredNode = 0

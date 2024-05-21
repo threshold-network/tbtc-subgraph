@@ -34,6 +34,7 @@ export const ADDRESS_TBTC = dataSource.network() == "sepolia" ? Address.fromStri
     '0x18084fbA666a33d37592fA2633fD49a74DD93a88',
 );
 
+export const MAXIMUM_BATCH_SIZE = 1000;
 export let ZERO_BI = BigInt.fromI32(0)
 export let ONE_BI = BigInt.fromI32(1)
 export let ZERO_BD = BigDecimal.fromString('0')

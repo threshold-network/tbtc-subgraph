@@ -13,6 +13,7 @@ enum RedemptionStatus {
     REQUESTED #-> bridge.requestRedemption() / RedemptionRequested event && bank.transferBalanceFrom() / BalanceTransferred event
     COMPLETED #-> bridge.submitRedemptionProof() / RedemptionCompleted event && bank.DecreaseBalance() / BalanceDecreased event && bank.trasferBalance() / BalanceTransferred event
     TIMEDOUT #-> bridge.notifyRedemptionTimeout() / RedemptionTimedOut
+    VETOED #-> redemptionWatchTower.raiseObjection()
 }
 
 type _Schema_
@@ -43,6 +44,7 @@ type User @entity {
     tbtcToken : TBTCToken!
     deposits: [Deposit!]!
     redemptions: [Redemption!]! @derivedFrom(field: "user")
+    isRedeemerBanned: Boolean!
 }
 
 type Deposit @entity {
@@ -263,6 +265,8 @@ type StatsRecord @entity {
 
     "The total number of stakers with a stake larger than 0."
     numOperators: Int!
+    numDeposits: Int!
+    numRedemptions: Int!
     numOperatorsRegisteredNode: Int!
 
     totalTBTCAuthorizedAmount: BigInt!
