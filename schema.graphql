@@ -41,9 +41,9 @@ type User @entity {
     mintingDebt: BigInt!
     tokenBalance: BigInt!
     totalTokensHeld: BigInt!
-    tbtcToken : TBTCToken!
+    tbtcToken: TBTCToken!
     deposits: [Deposit!]!
-    redemptions: [Redemption!]! @derivedFrom(field: "user")
+    redemptions: [Redemption!]!
     isRedeemerBanned: Boolean!
 }
 

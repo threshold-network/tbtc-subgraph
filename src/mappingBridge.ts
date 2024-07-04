@@ -52,7 +52,6 @@ import * as Swept from "./swept"
 
 import * as Const from "./utils/constants"
 import * as BitcoinUtils from "./utils/bitcoin_utils";
-import {output} from "./utils/crypto";
 
 export function handleDepositParametersUpdated(
     event: DepositParametersUpdated
@@ -251,8 +250,8 @@ export function handleRedemptionRequested(event: RedemptionRequested): void {
     let redemption = getOrCreateRedemption(id)
 
     redemption.status = "REQUESTED"
-    redemption.user = event.params.redeemer
     redemption.amount = event.params.requestedAmount
+    redemption.user = event.params.redeemer
     redemption.treasuryFee = event.params.treasuryFee
     redemption.txMaxFee = event.params.txMaxFee
     redemption.redemptionTxHash = event.transaction.hash
@@ -260,6 +259,14 @@ export function handleRedemptionRequested(event: RedemptionRequested): void {
     redemption.walletPubKeyHash = event.params.walletPubKeyHash
     redemption.redeemerOutputScript = event.params.redeemerOutputScript
     redemption.updateTimestamp = event.block.timestamp
+
+    let user = getOrCreateUser(event.params.redeemer)
+    let tBtcToken = getOrCreateTbtcToken()
+    user.tbtcToken = tBtcToken.id
+    let redemptions = user.redemptions
+    redemptions.push(redemption.id)
+    user.redemptions = redemptions
+    user.save()
 
     let transactions = redemption.transactions
     transactions.push(transaction.id)

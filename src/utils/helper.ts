@@ -35,6 +35,7 @@ export function getOrCreateUser(id: Bytes): User {
         user.tbtcToken = getOrCreateTbtcToken().id
         user.isRedeemerBanned = false
         user.deposits = []
+        user.redemptions = []
     }
     return user
 }

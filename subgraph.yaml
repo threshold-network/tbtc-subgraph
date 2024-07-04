@@ -343,3 +343,27 @@ dataSources:
         - event: WalletOwnerUpdated(address)
           handler: handleWalletOwnerUpdated
       file: ./src/mappingWalletRegistry.ts
+  - kind: ethereum
+    name: RedemptionWatchtower
+    network: mainnet
+    source:
+      abi: RedemptionWatchtower
+      address: "0xB8dF0A949aC45ff8f401553A1dcb742Feb38E6D3"
+      startBlock: 19413942
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - Redemption
+      abis:
+        - name: RedemptionWatchtower
+          file: ./abis/RedemptionWatchtower.json
+      eventHandlers:
+        - event: VetoFinalized(indexed uint256)
+          handler: handleVetoFinalized
+        - event: Banned(indexed address)
+          handler: handleBanned
+        - event: Unbanned(indexed address)
+          handler: handleUnbanned
+      file: ./src/mappingRedemptionWatchtower.ts
