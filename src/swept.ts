@@ -15,60 +15,6 @@ class DepositSweepTxInputInfo {
     inputLength: BigInt;
 }
 
-// function extractPubKeyHash(output: Uint8Array): Uint8Array {
-//     let pubKeyHash = new Uint8Array(20);
-//     let pubKeyHashBytes = extractHash(output);
-//     log.warning("pubKeyHashBytes length = {}", [pubKeyHashBytes.length.toString()])
-//     if (pubKeyHashBytes.length == 20) {
-//         let pubKeyHashView = new DataView(pubKeyHash.buffer);
-//         let pubKeyHashBytesView = new DataView(pubKeyHashBytes.buffer);
-//
-//         for (let i = 0; i < 20; i++) {
-//             pubKeyHashView.setUint8(i, pubKeyHashBytesView.getUint8(i));
-//         }
-//
-//         let scriptLen = output.length - 8;
-//         log.warning("scriptLen length = {}", [scriptLen.toString()])
-//
-//
-//         if (scriptLen == 23 || scriptLen == 26) {
-//             if (scriptLen == 26) {
-//                 let script = new Uint8Array(26);
-//
-//                 for (let i = 0; i < 26; i++) {
-//                     script[i] = output[i + 8];
-//                 }
-//
-//                 // let expectedScript = makeP2PKHScript(pubKeyHash);
-//                 // if (script != expectedScript) {
-//                 //     return new Uint8Array(1);
-//                 // }
-//
-//                 return script;
-//             } else if (scriptLen == 23) {
-//                 let script = new Uint8Array(23);
-//
-//                 for (let i = 0; i < 23; i++) {
-//                     script[i] = output[i + 8];
-//                 }
-//
-//                 // let expectedScript = makeP2WPKHScript(pubKeyHash);
-//                 //
-//                 // log.warning("script = {}, expectedScript = {}", [Bytes.fromUint8Array(script).toHexString(),
-//                 //     Bytes.fromUint8Array(expectedScript).toHexString()])
-//                 //
-//                 //
-//                 // if (script != expectedScript) {
-//                 //     return new Uint8Array(1);
-//                 // }
-//
-//                 return script;
-//             }
-//         }
-//     }
-//     return new Uint8Array(1);
-// }
-
 function isBytes32Zero(input: Bytes): bool {
     for (let i = 0; i < input.length; i++) {
         if (input[i] != 0) {
