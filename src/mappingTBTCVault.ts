@@ -12,15 +12,12 @@ import {log, Bytes} from "@graphprotocol/graph-ts"
 import * as Helper from "./utils/helper"
 import * as Utils from "./utils/utils"
 import * as Const from "./utils/constants"
-import {getOrCreateDeposit, getOrCreateTbtcToken, getOrCreateUser, getStats} from "./utils/helper";
+import {getOrCreateDeposit, getOrCreateTbtcToken, getOrCreateUser, getStats, getStatus} from "./utils/helper";
 import {getIDFromEvent} from "./utils/utils";
 
 import {
     TBTC
 } from "../generated/TBTC/TBTC"
-import {Treasury} from "./utils/constants";
-import {Bridge} from "../generated/Bridge/Bridge";
-import {User} from "../generated/schema";
 
 export function handleOptimisticMintingCancelled(
     event: OptimisticMintingCancelled
@@ -98,7 +95,7 @@ export function handleOptimisticMintingFinalized(
     transactionEntity.description = "Minting Finalized"
     transactionEntity.save()
 
-    deposit.status = "COMPLETED"
+    deposit.status = "MINTING_FINALIZED"
     deposit.updateTimestamp = event.block.timestamp
     deposit.newDebt = event.params.optimisticMintingDebt
     deposit.actualAmountReceived = amountToMint.minus(optimisticMintFee)
@@ -149,67 +146,39 @@ export function handleOptimisticMintingRequested(
 
 
 export function handleMinted(event: Minted): void {
-    let contract = TBTC.bind(Const.TBTCToken)
     let tBtcToken = getOrCreateTbtcToken()
     tBtcToken.totalMint = tBtcToken.totalMint.plus(event.params.amount)
-    tBtcToken.totalSupply = contract.totalSupply()
+    tBtcToken.totalSupply = tBtcToken.totalSupply.plus(event.params.amount)
     tBtcToken.save()
 
-    //check if the user has swept the deposit
-    if (event.params.to.toHex() != Const.Treasury.toHex()) {
-        let user = getOrCreateUser(event.params.to)
-        if (user) {
-            let deposits = user.deposits
-            if (deposits) {
-                for (let i = 0; i < deposits.length; i++) {
-                    let depositId = deposits[i]
-                    let deposit = getOrCreateDeposit(depositId)
-
-                    // if a user has two deposits in the swept state, it will be necessary to check
-                    // if the deposit on the contract has a sweptAt timestamp that
-                    // is not equal to zero to determine which deposit has just been processed.
-                    if (deposit.status == "SWEPT") {
-                        let bridgeContract = Bridge.bind(Const.BRIDGE_CONTRACT)
-                        let depositsContract = bridgeContract.deposits(Utils.hexToBigint(deposit.id.toHex()))
-                        let sweptAt = depositsContract.sweptAt
-
-                        //if sweptAt != 0 means that this deposit has just been processed.
-                        if (sweptAt.notEqual(Const.ZERO_BI)) {
-                            let transactionEntity = Helper.getOrCreateTransaction(getIDFromEvent(event))
-                            transactionEntity.txHash = event.transaction.hash
-                            transactionEntity.timestamp = event.block.timestamp
-                            transactionEntity.from = event.transaction.from
-                            transactionEntity.to = event.transaction.to
-                            transactionEntity.amount = event.params.amount
-                            transactionEntity.description = "Swept deposit processed successfully."
-                            transactionEntity.save()
-
-                            let transactions = deposit.transactions
-                            transactions.push(transactionEntity.id)
-                            deposit.transactions = transactions
-                            deposit.actualAmountReceived = event.params.amount
-                            deposit.status = "COMPLETED"
-                            deposit.save()
-                        }
-                    }
-                }
-            } else {
-                log.warning("deposits is null", [])
-            }
-        } else {
-            log.warning("user is null", [])
-
+    //Reset lastMintedInfo when handle diff transaction
+    let status = getStatus()
+    if (status.lastMintedHash.toHexString().toLowerCase() !== event.transaction.hash.toHexString().toLowerCase()) {
+        if (status.lastMintedInfo.length > 0) {
+            status.lastMintedInfo = []
+            status.save()
         }
+    }
 
+    // Update actualAmountReceived in case tBTC mint
+    // happening under the hood given that sweeping can also result in minting if, for the given revealed deposit, minters did not mint tBTC
+    if (event.params.amount.gt(Const.ZERO_BI)) {
+        let userDepositAmount = event.params.to.toHexString().concat("-").concat(event.params.amount.toString())
+        let lastMintedInfo: Array<string> = []
+        lastMintedInfo.push(userDepositAmount)
+
+        let status = getStatus()
+        status.lastMintedInfo = lastMintedInfo
+        status.lastMintedHash = event.transaction.hash
+        status.save()
     }
 
 }
 
 export function handlerUnminted(event: Unminted): void {
-    let contract = TBTC.bind(Const.TBTCToken)
     let tBtcToken = getOrCreateTbtcToken()
-    tBtcToken.totalBurn = tBtcToken.totalMint.plus(event.params.amount)
-    tBtcToken.totalSupply = contract.totalSupply()
+    tBtcToken.totalBurn = tBtcToken.totalBurn.plus(event.params.amount)
+    tBtcToken.totalSupply = tBtcToken.totalSupply.minus(event.params.amount)
     tBtcToken.save()
 }
 

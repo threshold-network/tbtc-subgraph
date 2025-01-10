@@ -1,6 +1,23 @@
-import {ethereum, BigInt, ByteArray, Bytes, Entity, Value} from '@graphprotocol/graph-ts'
-import {crypto} from '@graphprotocol/graph-ts'
+import {BigInt, ByteArray, Bytes, crypto, ethereum} from '@graphprotocol/graph-ts'
 import {final, init, update} from "./crypto";
+import { getOrCreateRedemption } from './helper';
+import * as Const from './constants';
+
+export function reformatRedemptionKeyIfExists(redeemerOutputScript: Bytes, walletPubKeyHash: Bytes): string {
+    let loop = true
+    let count = Const.ZERO_BI
+    let id = ""
+    while (loop) {
+        id = calculateRedemptionKey(redeemerOutputScript, walletPubKeyHash, count)
+        let redemption = getOrCreateRedemption(id)
+        if (redemption.updateTimestamp.notEqual(Const.ZERO_BI)) {
+            count = count.plus(Const.ONE_BI)
+        } else {
+            loop = false
+        }
+    }
+    return id
+}
 
 /** Calculates deposit key the same way as the Bridge contract.
  The deposit key is computed as
@@ -21,21 +38,35 @@ export function calculateDepositKey(
     for (let i = 0; i < data.length; i++) {
         byteArray[i] = data[i];
     }
-    let hashArray = crypto.keccak256(byteArray);
-    return hashArray;
+    return crypto.keccak256(byteArray);
 }
 
 /**
- * keccak256(keccak256(redeemerOutputScript) | walletPubKeyHash)
+ * keccak256(keccak256(redeemerOutputScript) | walletPubKeyHash) + "-" + count
  * */
-export function calculateRedemptionKey(redeemerOutputScript: ByteArray, walletPublicKeyHash: ByteArray): ByteArray {
+export function calculateRedemptionKey(redeemerOutputScript: ByteArray, walletPublicKeyHash: ByteArray, count: BigInt): string {
     let scriptHashArray = crypto.keccak256(redeemerOutputScript);
     let data = new Uint8Array(scriptHashArray.length + walletPublicKeyHash.length);
     data.set(scriptHashArray, 0);
     data.set(walletPublicKeyHash, scriptHashArray.length);
 
-    let hashArray = crypto.keccak256(Bytes.fromUint8Array(data));
-    return hashArray;
+    return crypto.keccak256(Bytes.fromUint8Array(data)).toHexString().concat("-").concat(count.toString());
+}
+
+/**
+ * The key = keccak256(scriptHash | walletPubKeyHash) + "-" + count
+ */
+export function calculateRedemptionKeyByScriptHash(scriptHash: ByteArray, walletPublicKeyHash: ByteArray, count: BigInt): string {
+    let data = new Uint8Array(scriptHash.length + walletPublicKeyHash.length);
+    data.set(scriptHash, 0);
+    data.set(walletPublicKeyHash, scriptHash.length);
+
+    return crypto.keccak256(Bytes.fromUint8Array(data)).toHexString().concat("-").concat(count.toString());
+}
+
+export function calculateRedemptionKeyByBigInt(redemptionKey: BigInt, count: BigInt): string {
+    const redemptionKeyInHexString = bigIntToHex(redemptionKey);
+    return redemptionKeyInHexString.concat("-").concat(count.toString());
 }
 
 export function keccak256TwoString(first: string, second: string): string {
@@ -74,6 +105,32 @@ export function hexToBigint(hex: string): BigInt {
     }
     return bigint;
 }
+
+export function bigIntToHex(bigInt: BigInt, paddingLength: i32 = 64): string {
+        const zero = BigInt.fromI32(0);
+        if (bigInt.equals(zero)) {
+            return "0x" + "0".repeat(paddingLength);
+        }
+    
+        let hex = '';
+        while (bigInt.gt(zero)) {
+            let digit = bigInt.mod(BigInt.fromI32(16));
+            bigInt = bigInt.div(BigInt.fromI32(16));
+    
+            if (digit.ge(zero) && digit.le(BigInt.fromI32(9))) {
+                hex = String.fromCharCode(digit.toI32() + 48) + hex;
+            } else {
+                hex = String.fromCharCode(digit.toI32() + 87) + hex; // Adding 87 for 'a'-'f'
+            }
+        }
+    
+        // Pad with zeros if the hex string is shorter than the specified length
+        if (hex.length < paddingLength) {
+            hex = "0".repeat(paddingLength - hex.length) + hex;
+        }
+    
+        return '0x' + hex;
+    }
 
 export function toHexString(bin: Uint8Array): string {
     let bin_len = bin.length;
@@ -139,7 +196,7 @@ export function removeItem<T>(data: Array<T>, item: T): Array<T> {
         // Item not found, return the original array
         return data;
     }
-    
+
     // Remove the item using splice()
     data.splice(index, 1);
     return data;

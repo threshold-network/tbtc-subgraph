@@ -33,7 +33,9 @@ export function getOrCreateUser(id: Bytes): User {
         user.tokenBalance = constants.ZERO_BI
         user.totalTokensHeld = constants.ZERO_BI
         user.tbtcToken = getOrCreateTbtcToken().id
+        user.isRedeemerBanned = false
         user.deposits = []
+        user.redemptions = []
     }
     return user
 }
@@ -48,18 +50,21 @@ export function getOrCreateDeposit(id: Bytes): Deposit {
         deposit.treasuryFee = constants.ZERO_BI
         deposit.actualAmountReceived = constants.ZERO_BI
         deposit.newDebt = constants.ZERO_BI
+        deposit.depositTimestamp = constants.ZERO_BI
+        deposit.sweptAt = constants.ZERO_BI
     }
     return deposit
 }
 
 
-export function getOrCreateRedemption(id: Bytes): Redemption {
+export function getOrCreateRedemption(id: string): Redemption {
     let redemption = Redemption.load(id)
     if (!redemption) {
         redemption = new Redemption(id)
-        redemption.status = "REQUESTED"
+        redemption.status = "UNKNOWN"
         redemption.amount = constants.ZERO_BI
         redemption.transactions = []
+        redemption.updateTimestamp = constants.ZERO_BI
     }
     return redemption
 }
@@ -103,6 +108,8 @@ export function getStats(): StatsRecord {
     if (stats == null) {
         stats = new StatsRecord("current")
         stats.numOperators = 0
+        stats.numDeposits = 0
+        stats.numRedemptions = 0
         stats.totalTBTCAuthorizedAmount = constants.ZERO_BI
         stats.totalRandomBeaconAuthorizedAmount = constants.ZERO_BI
         stats.numOperatorsRegisteredNode = 0
@@ -119,6 +126,8 @@ export function getStatus(): StatusRecord {
         status.groupState = "IDLE"
         status.ecdsaState = "IDLE"
         status.pendingRedemptions = []
+        status.lastMintedInfo = []
+        status.lastMintedHash = Bytes.empty()
     }
     return status as StatusRecord
 }

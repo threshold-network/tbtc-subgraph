@@ -206,6 +206,7 @@ export function handleOperatorJoinedSortitionPool(
     let events = operator.events
     events.push(eventEntity.id)
     operator.events = events
+    operator.address = event.params.operator
     operator.save()
 }
 
