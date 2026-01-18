@@ -1,6 +1,6 @@
 # tBTC subgraph v2
 
-Provide insight into the workings of the Keep and tBTC systems - deposits, redemptions, who bonds for what, governance actions, etc
+Provide insight into the workings of the Threshold tBTC system - deposits, redemptions, signers, governance actions, etc
 
 ## Installation
 
