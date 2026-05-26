@@ -7,8 +7,39 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..");
-const canonicalDir = path.join(repoRoot, "packages", "abi", "dist", "contracts");
-const subgraphAbiDir = path.join(repoRoot, "data", "tbtc-subgraph", "abis");
+
+// Path normalization (allowlisted-divergence per source manifest):
+// Canonical tbtc-subgraph layout places subgraph ABIs at `<repoRoot>/abis`
+// (no `data/tbtc-subgraph/` prefix; the entire monorepo subtree IS the
+// canonical repo root). Monorepo source path was
+// `data/tbtc-subgraph/abis` relative to monorepo root.
+const subgraphAbiDir = path.join(repoRoot, "abis");
+
+// Canonical-published ABI source: the monorepo version expected
+// `packages/abi/dist/contracts/` in the same repo. In canonical
+// subgraph context, the source of truth for tbtc-v2 ABIs lives in
+// a different repo (`threshold-network/tbtc-v2`). Source is
+// configurable via TBTC_V2_ABI_DIR env var; default expects the
+// canonical-published npm package `@threshold-network/tbtc-v2-abi`
+// to be installed in this repo's node_modules.
+//
+// CI integration (post-Gate-E stable ABI release):
+//   pnpm install @threshold-network/tbtc-v2-abi
+//   node scripts/verify-subgraph-abi-drift.mjs
+//
+// Pre-Gate-E (during extraction window): set
+//   TBTC_V2_ABI_DIR=<path to checked-out tbtc-v2 solidity/packages/abi/dist/contracts>
+const defaultCanonicalDir = path.join(
+  repoRoot,
+  "node_modules",
+  "@threshold-network",
+  "tbtc-v2-abi",
+  "contracts",
+);
+const canonicalDir = process.env.TBTC_V2_ABI_DIR
+  ? path.resolve(process.env.TBTC_V2_ABI_DIR)
+  : defaultCanonicalDir;
+
 const allowlistPath = path.join(__dirname, "abi-drift-allowlist.json");
 
 async function exists(filePath) {
@@ -95,13 +126,17 @@ function diffSets(leftSet, rightSet) {
 
 if (!(await exists(canonicalDir))) {
   console.error(
-    "Missing canonical ABI directory packages/abi/dist/contracts. Run `pnpm run generate:abi` first.",
+    `Missing canonical ABI directory: ${canonicalDir}\n` +
+      `Either install the canonical-published ABI package:\n` +
+      `  pnpm install --save-dev @threshold-network/tbtc-v2-abi\n` +
+      `or set TBTC_V2_ABI_DIR to point at a local checkout's solidity/packages/abi/dist/contracts:\n` +
+      `  TBTC_V2_ABI_DIR=/path/to/tbtc-v2/solidity/packages/abi/dist/contracts node scripts/verify-subgraph-abi-drift.mjs`,
   );
   process.exit(1);
 }
 
 if (!(await exists(subgraphAbiDir))) {
-  console.error("Missing subgraph ABI directory data/tbtc-subgraph/abis.");
+  console.error(`Missing subgraph ABI directory: ${subgraphAbiDir}`);
   process.exit(1);
 }
 
