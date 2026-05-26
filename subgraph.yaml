@@ -59,6 +59,8 @@ dataSources:
           handler: handleMovingFundsTimeoutReset
         - event: NewWalletRegistered(indexed bytes32,indexed bytes20)
           handler: handleNewWalletRegistered
+        - event: NewWalletRegisteredV2(indexed bytes32,indexed bytes32,indexed bytes20)
+          handler: handleNewWalletRegisteredV2
         - event: NewWalletRequested()
           handler: handleNewWalletRequested
         - event: RedemptionParametersUpdated(uint64,uint64,uint64,uint64,uint32,uint96,uint32)
@@ -86,6 +88,38 @@ dataSources:
           handler: handleWalletParametersUpdated
         - event: WalletTerminated(indexed bytes32,indexed bytes20)
           handler: handleWalletTerminated
+        # ---- C-1 prep additions: post-#431/#434/#435/#439 Bridge surface ----
+        # FROST wallet registration (Phase A entry point on Bridge).
+        # Bridge emits the event via the Wallets library running in
+        # Bridge's storage context, so the emitter address is the
+        # Bridge contract.
+        - event: NewFrostWalletRegistered(indexed bytes32,indexed bytes20,indexed bytes32)
+          handler: handleNewFrostWalletRegistered
+        # One-time governance setters added in #431/#434/#435 for the
+        # FROST registry, ECDSA fraud router, P2TR fraud router, and
+        # lifecycle router. Subgraph tracks the addresses on the
+        # BridgeState singleton entity; the fraud-router events also
+        # serve as the cutover signal for the matching datasource.
+        - event: FrostWalletRegistrySet(address)
+          handler: handleFrostWalletRegistrySet
+        - event: EcdsaFraudRouterSet(address)
+          handler: handleEcdsaFraudRouterSet
+        - event: P2TRFraudRouterSet(address)
+          handler: handleP2TRFraudRouterSet
+        - event: LifecycleRouterSet(address)
+          handler: handleLifecycleRouterSet
+        # C-2 (PR #439) scheme-preference event. The companion
+        # `EcdsaWalletCountSeeded` event was originally specified
+        # in RFC v6 alongside this one but is deferred from the
+        # C-2 PR; the C-1.1c follow-up will add the matching
+        # handler once C-2.1 ships the counter + seed mechanism
+        # (see `docs/frost-migration/c1-companion-services-plan.md`).
+        - event: NewWalletSchemeSet(indexed uint8)
+          handler: handleNewWalletSchemeSet
+        # #435 one-time legacy-challenge migration event (fires
+        # per-challenge during the cutover migration helper).
+        - event: LegacyFraudChallengeMigrated(indexed uint8,indexed uint256,indexed address,uint256)
+          handler: handleLegacyFraudChallengeMigrated
       callHandlers:
         - function: submitRedemptionProof((bytes4,bytes,bytes,bytes4),(bytes,uint256,bytes),(bytes32,uint32,uint64),bytes20)
           handler: callHandlerSubmitRedemptionProof
