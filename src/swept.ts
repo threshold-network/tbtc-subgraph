@@ -106,6 +106,21 @@ function parseDepositSweepTxInputAt(
     };
 }
 
+// Maps each swept deposit to the mint it received by draining the
+// per-transaction lastMintedInfo accumulated by handleMinted.
+//
+// This relies on two ordering invariants that are NOT enforced here and have
+// no automated test; breaking either silently mis-pairs deposits and mint
+// amounts:
+//   1. Trigger ordering: this SubmitDepositSweepProof *call* handler runs
+//      after the same-transaction Minted *event* handlers, so lastMintedInfo
+//      is already populated for this transaction when we read it below. (A
+//      sweep proof and its mints share one transaction.)
+//   2. Per-depositor ordering: for a depositor with multiple deposits in one
+//      batch, the k-th Minted event (log order) corresponds to that
+//      depositor's k-th deposit (sweep-input order). The consume-once
+//      mintedConsumed bookkeeping below depends on this to hand out mints in
+//      order rather than always matching the first.
 export function processDepositSweepTxInputs(
     call: SubmitDepositSweepProofCall
 ): void {
