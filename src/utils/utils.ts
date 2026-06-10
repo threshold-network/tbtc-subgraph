@@ -99,6 +99,11 @@ export function hexToBigint(hex: string): BigInt {
             value = char - 48;
         } else if (char >= 65 && char <= 70) {
             value = char - 55;
+        } else if (char >= 97 && char <= 102) {
+            // Lowercase 'a'-'f'. graph-ts toHexString() emits lowercase hex, so
+            // without this branch every key containing an a-f nibble is silently
+            // corrupted to a wrong BigInt (the digit reads as 0).
+            value = char - 87;
         }
         bigint = bigint.plus(BigInt.fromI32(value).times(power));
         power = power.times(BigInt.fromI32(16));

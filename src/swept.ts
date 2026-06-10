@@ -2,7 +2,7 @@ import {ethereum, BigInt, ByteArray, Bytes, Entity, Value} from '@graphprotocol/
 import {log} from '@graphprotocol/graph-ts'
 import * as BitcoinUtils from "./utils/bitcoin_utils";
 import * as Utils from "./utils/utils";
-import {Bridge, SubmitDepositSweepProofCall} from "../generated/Bridge/Bridge";
+import {SubmitDepositSweepProofCall} from "../generated/Bridge/Bridge";
 import {
     getOrCreateDeposit, getOrCreateTransaction, getOrCreateUser, getStatus
 } from "./utils/helper"
@@ -166,16 +166,6 @@ export function processDepositSweepTxInputs(
 
             if (deposit.actualAmountReceived.equals(Const.ZERO_BI)){
                 deposit.actualAmountReceived = actualAmountReceived
-            }
-
-            // The Bridge stores treasuryFee = 0 at reveal and only finalises it
-            // when the sweep is proven, so the reveal-time read in
-            // handleDepositRevealed always captures 0. Re-read the on-chain
-            // deposit record here to record the real, per-deposit treasury fee.
-            let bridgeContract = Bridge.bind(call.to)
-            let onchainDeposit = bridgeContract.try_deposits(Utils.hexToBigint(depositKey.toHexString()))
-            if (!onchainDeposit.reverted) {
-                deposit.treasuryFee = onchainDeposit.value.treasuryFee
             }
 
             deposit.save()
