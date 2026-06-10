@@ -156,7 +156,6 @@ export function handleMinted(event: Minted): void {
     if (status.lastMintedHash.toHexString().toLowerCase() !== event.transaction.hash.toHexString().toLowerCase()) {
         status.lastMintedInfo = []
         status.lastMintedHash = event.transaction.hash
-        status.save()
     }
 
     // Accumulate every mint in this transaction, in log order, so the sweep call
@@ -168,8 +167,13 @@ export function handleMinted(event: Minted): void {
         let lastMintedInfo = status.lastMintedInfo
         lastMintedInfo.push(userDepositAmount)
         status.lastMintedInfo = lastMintedInfo
-        status.save()
     }
+
+    // Persist once. A single unconditional save ensures the reset above is
+    // always stored, including a new-transaction mint with amount == 0 that
+    // skips the accumulate branch (which would otherwise leave a stale
+    // lastMintedHash/lastMintedInfo for the next mint).
+    status.save()
 
 }
 
