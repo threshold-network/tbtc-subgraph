@@ -1,0 +1,56 @@
+[
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "redemptionKey",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes20",
+        "name": "walletPubKeyHash",
+        "type": "bytes20"
+      },
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "txHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "txOutputIndex",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "txOutputValue",
+            "type": "uint64"
+          }
+        ],
+        "indexed": false,
+        "internalType": "struct BitcoinTx.UTXO",
+        "name": "mainUtxo",
+        "type": "tuple"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes",
+        "name": "redemptionOutputScript",
+        "type": "bytes"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "RedemptionRequested",
+    "type": "event"
+  }
+]

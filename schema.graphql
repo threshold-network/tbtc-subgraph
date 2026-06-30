@@ -117,6 +117,52 @@ enum TransactionEvent {
     WITHDRAW_REWARD
 }
 
+enum BridgeActivityType {
+    DEPOSIT_INITIALIZED
+    DEPOSIT_FINALIZED
+    TOKENS_TRANSFERRED_WITH_PAYLOAD
+    TBTC_BRIDGED_TO_STARKNET
+    REDEMPTION_REQUESTED
+}
+
+enum BridgeActivityDirection {
+    IN
+    OUT
+}
+
+type BridgeActivity @entity {
+    id: ID!
+    type: BridgeActivityType!
+    direction: BridgeActivityDirection!
+    protocol: String!
+    sourceChain: String!
+    destinationChain: String!
+    sourceContract: Bytes!
+    txHash: Bytes!
+    logIndex: BigInt!
+    blockNumber: BigInt!
+    timestamp: BigInt!
+
+    sender: Bytes
+    recipient: Bytes
+    recipientBytes32: Bytes
+    starkNetRecipient: BigInt
+    walletPubKeyHash: Bytes
+    redemptionOutputScript: Bytes
+
+    depositKey: BigInt
+    redemptionKey: BigInt
+    amount: BigInt
+    initialAmount: BigInt
+    tbtcAmount: BigInt
+    sequence: BigInt
+    fee: BigInt
+
+    mainUtxoTxHash: Bytes
+    mainUtxoOutputIndex: BigInt
+    mainUtxoOutputValue: BigInt
+}
+
 type Event @entity {
     #Hash of transaction
     id: ID!
