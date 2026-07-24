@@ -35,6 +35,26 @@
     "L1BTCRedeemerWormhole": {
       "address": "0x0000000000000000000000000000000000000000",
       "startBlock": 0
+    },
+    "GaslessDepositor": {
+      "address": "0x1AB655E0dCBf19fB706c0ca3dDcda6F5653E2d12",
+      "startBlock": 10769976
+    },
+    "ArbitrumDepositor": {
+      "address": "0xD9B523fb879C63b00ef14e48C98f4e3398d3BA2D",
+      "startBlock": 6281003
+    },
+    "BaseDepositor": {
+      "address": "0x59FAE614867b66421b44D1Ed3461e6B6a4B50106",
+      "startBlock": 7592526
+    },
+    "SuiDepositor": {
+      "address": "0x25b614064293A6B9012E82Bb31BC2B1Be34e36Cb",
+      "startBlock": 8680336
+    },
+    "StarkNetDepositor": {
+      "address": "0x40c74a5f0b0e6CC3Ae4E8dD2Db46d372504445DA",
+      "startBlock": 8509896
     }
   },
   "mainnet": {
@@ -73,6 +93,26 @@
     "L1BTCRedeemerWormhole": {
       "address": "0x5D4d83aaB53B7E7cA915AEB2d4d3f4e03823DbDe",
       "startBlock": 18500000
+    },
+    "GaslessDepositor": {
+      "address": "0xad7c6d46F4a4bc2D3A227067d03218d6D7c9aaa5",
+      "startBlock": 23576205
+    },
+    "ArbitrumDepositor": {
+      "address": "0x75A6e4A7C8fAa162192FAD6C1F7A6d48992c619A",
+      "startBlock": 20632547
+    },
+    "BaseDepositor": {
+      "address": "0x186D048097c7406C64EfB0537886E3CaE100a1fe",
+      "startBlock": 21961116
+    },
+    "SuiDepositor": {
+      "address": "0xb810AbD43d8FCFD812d6FEB14fefc236E92a341A",
+      "startBlock": 22842726
+    },
+    "StarkNetDepositor": {
+      "address": "0xC9031f76006da0BD4bFa9E02aDf0d448dB3BC155",
+      "startBlock": 22671770
     }
   }
 }

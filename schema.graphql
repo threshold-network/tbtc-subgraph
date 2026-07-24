@@ -96,8 +96,9 @@ type Deposit @entity {
     # `where: { destinationOwner: $owner }` lookup is a drop-in for the client's
     # chunked eth_getLogs scan. Null for standard deposits.
     destinationOwner: Bytes
-    # L1 msg.sender that revealed the routed deposit (relayer for gasless, or the
-    # L1 depositor proxy). Cheap to carry and useful for debugging/attribution.
+    # L1 msg.sender of the FIRST routed event seen for this deposit — the
+    # initializer when it is in range, otherwise the (permissionless, typically
+    # relayer) finalizer. Cheap to carry and useful for debugging/attribution.
     l1Sender: Bytes
     # True once a routed DepositInitialized/DepositFinalized has attached here.
     isRouted: Boolean
