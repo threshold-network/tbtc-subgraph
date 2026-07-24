@@ -1,4 +1,4 @@
-import { BigInt, Bytes } from '@graphprotocol/graph-ts'
+import { BigInt, Bytes, log } from '@graphprotocol/graph-ts'
 
 import {
     DepositInitialized,
@@ -6,7 +6,7 @@ import {
     DepositInitialized1 as LegacyDepositInitialized,
     DepositFinalized1 as LegacyDepositFinalized,
 } from '../generated/GaslessDepositor/RoutedDepositor'
-import { getOrCreateDeposit } from './utils/helper'
+import { Deposit } from '../generated/schema'
 import * as Utils from './utils/utils'
 
 // The routed L1 depositors emitted two event eras. The legacy overloads
@@ -44,10 +44,19 @@ function attachRoutedDestination(
 ): void {
     // The Bridge datasource (startBlock 16,397,413) indexes DepositRevealed for
     // routed deposits too — emitted in the same transaction and at a lower log
-    // index than DepositInitialized — so the Deposit already exists with its
-    // required `user` set before this handler runs. getOrCreateDeposit therefore
-    // loads the existing entity rather than creating a userless one.
-    let deposit = getOrCreateDeposit(depositIdFromKey(depositKey))
+    // index than DepositInitialized — so the Deposit always exists with its
+    // required `user` set before this handler runs. Load-and-skip rather than
+    // getOrCreate: if that invariant ever broke, creating a Deposit here would
+    // save an entity missing non-nullable fields and halt the ENTIRE subgraph;
+    // dropping the routed attachment for one unknown key is strictly better.
+    let deposit = Deposit.load(depositIdFromKey(depositKey))
+    if (!deposit) {
+        log.warning(
+            'Routed deposit event for unknown deposit key {} — attachment skipped',
+            [depositKey.toHexString()]
+        )
+        return
+    }
     deposit.destinationOwner = destinationOwner
     // Keep the first routed sender seen (the initializer when in range) —
     // DepositFinalized is permissionless and typically sent by a relayer.
