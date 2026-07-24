@@ -408,6 +408,22 @@ dataSources:
       abi: L1BTCRedeemerWormhole
       address: "0x5D4d83aaB53B7E7cA915AEB2d4d3f4e03823DbDe"
       startBlock: 18500000
+
+  # ---------------------------------------------------------------------------
+  # Routed-deposit L1 depositors. All inherit AbstractL1BTCDepositor and emit
+  # DepositInitialized/DepositFinalized(uint256 indexed depositKey, bytes32
+  # indexed destinationChainDepositOwner, address indexed l1Sender, ...). The
+  # depositKey equals the Bridge Deposit id, so mappingRoutedDeposit attaches
+  # destinationOwner straight onto the existing Deposit. startBlock is the floor
+  # the dapp's client-side scan uses; per-contract deploy blocks can raise it.
+  # ---------------------------------------------------------------------------
+  - kind: ethereum
+    name: GaslessDepositor
+    network: mainnet
+    source:
+      abi: RoutedDepositor
+      address: "0xad7c6d46F4a4bc2D3A227067d03218d6D7c9aaa5"
+      startBlock: 20650000
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.6
@@ -430,3 +446,106 @@ dataSources:
         - function: requestRedemption(bytes)
           handler: handleRequestRedemptionCall
       file: ./src/mappingL1BTCRedeemer.ts
+        - Deposit
+      abis:
+        - name: RoutedDepositor
+          file: ./abis/RoutedDepositor.json
+      eventHandlers:
+        - event: DepositInitialized(indexed uint256,indexed bytes32,indexed address)
+          handler: handleRoutedDepositInitialized
+        - event: DepositFinalized(indexed uint256,indexed bytes32,indexed
+            address,uint256,uint256)
+          handler: handleRoutedDepositFinalized
+      file: ./src/mappingRoutedDeposit.ts
+  - kind: ethereum
+    name: ArbitrumDepositor
+    network: mainnet
+    source:
+      abi: RoutedDepositor
+      address: "0x75A6e4A7C8fAa162192FAD6C1F7A6d48992c619A"
+      startBlock: 20650000
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - Deposit
+      abis:
+        - name: RoutedDepositor
+          file: ./abis/RoutedDepositor.json
+      eventHandlers:
+        - event: DepositInitialized(indexed uint256,indexed bytes32,indexed address)
+          handler: handleRoutedDepositInitialized
+        - event: DepositFinalized(indexed uint256,indexed bytes32,indexed
+            address,uint256,uint256)
+          handler: handleRoutedDepositFinalized
+      file: ./src/mappingRoutedDeposit.ts
+  - kind: ethereum
+    name: BaseDepositor
+    network: mainnet
+    source:
+      abi: RoutedDepositor
+      address: "0x186D048097c7406C64EfB0537886E3CaE100a1fe"
+      startBlock: 20650000
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - Deposit
+      abis:
+        - name: RoutedDepositor
+          file: ./abis/RoutedDepositor.json
+      eventHandlers:
+        - event: DepositInitialized(indexed uint256,indexed bytes32,indexed address)
+          handler: handleRoutedDepositInitialized
+        - event: DepositFinalized(indexed uint256,indexed bytes32,indexed
+            address,uint256,uint256)
+          handler: handleRoutedDepositFinalized
+      file: ./src/mappingRoutedDeposit.ts
+  - kind: ethereum
+    name: SuiDepositor
+    network: mainnet
+    source:
+      abi: RoutedDepositor
+      address: "0xb810AbD43d8FCFD812d6FEB14fefc236E92a341A"
+      startBlock: 20650000
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - Deposit
+      abis:
+        - name: RoutedDepositor
+          file: ./abis/RoutedDepositor.json
+      eventHandlers:
+        - event: DepositInitialized(indexed uint256,indexed bytes32,indexed address)
+          handler: handleRoutedDepositInitialized
+        - event: DepositFinalized(indexed uint256,indexed bytes32,indexed
+            address,uint256,uint256)
+          handler: handleRoutedDepositFinalized
+      file: ./src/mappingRoutedDeposit.ts
+  - kind: ethereum
+    name: StarkNetDepositor
+    network: mainnet
+    source:
+      abi: RoutedDepositor
+      address: "0xC9031f76006da0BD4bFa9E02aDf0d448dB3BC155"
+      startBlock: 20650000
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - Deposit
+      abis:
+        - name: RoutedDepositor
+          file: ./abis/RoutedDepositor.json
+      eventHandlers:
+        - event: DepositInitialized(indexed uint256,indexed bytes32,indexed address)
+          handler: handleRoutedDepositInitialized
+        - event: DepositFinalized(indexed uint256,indexed bytes32,indexed
+            address,uint256,uint256)
+          handler: handleRoutedDepositFinalized
+      file: ./src/mappingRoutedDeposit.ts
