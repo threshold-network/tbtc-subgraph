@@ -83,7 +83,25 @@ export function bytesToUint8Array(bytes: Bytes): Uint8Array {
 }
 
 /**
+ * Convert a big-endian byte array (such as a deposit key) to the BigInt the
+ * Bridge contract expects as a `uint256` argument.
+ *
+ * `BigInt.fromUnsignedBytes` reads little-endian, so the big-endian digest is
+ * reversed first. Going through bytes avoids the hex round-trip entirely.
+ */
+export function byteArrayToBigint(bytes: ByteArray): BigInt {
+    let reversed = new ByteArray(bytes.length);
+    for (let i = 0; i < bytes.length; i++) {
+        reversed[i] = bytes[bytes.length - 1 - i];
+    }
+    return BigInt.fromUnsignedBytes(reversed);
+}
+
+/**
  * Convert hex to Bigint. Start from the last character and multiply value with the 16s power.
+ *
+ * Accepts both cases: `ByteArray.toHexString()` emits lowercase, and decoding
+ * only `A-F` silently turned every a-f digit into 0.
  */
 export function hexToBigint(hex: string): BigInt {
     if (hex.length >= 2 && hex.charAt(0) == '0' && hex.charAt(1) == 'x') {
