@@ -31,6 +31,10 @@
     "RedemptionWatchtower": {
       "address": "0x4E6CFb556143381070b17825707b3DE7F3148FaC",
       "startBlock": 5340873
+    },
+    "L1BTCRedeemerWormhole": {
+      "address": "0x0000000000000000000000000000000000000000",
+      "startBlock": 0
     }
   },
   "mainnet": {
@@ -65,6 +69,10 @@
     "RedemptionWatchtower": {
       "address": "0xB8dF0A949aC45ff8f401553A1dcb742Feb38E6D3",
       "startBlock": 19413942
+    },
+    "L1BTCRedeemerWormhole": {
+      "address": "0x5D4d83aaB53B7E7cA915AEB2d4d3f4e03823DbDe",
+      "startBlock": 18500000
     }
   }
 }
