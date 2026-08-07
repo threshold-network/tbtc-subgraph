@@ -85,10 +85,11 @@ function normalizeEntry(entry) {
   if (type === "event") {
     const name = String(entry?.name ?? "");
     const inputs = Array.isArray(entry?.inputs) ? entry.inputs : [];
+    const anonymous = entry?.anonymous ? "anonymous" : "nonanonymous";
     const params = inputs
       .map((item) => `${normalizeType(item)}:${item?.indexed ? "indexed" : "plain"}`)
       .join(",");
-    return `event:${name}(${params})`;
+    return `event:${anonymous}:${name}(${params})`;
   }
 
   if (type === "error") {
