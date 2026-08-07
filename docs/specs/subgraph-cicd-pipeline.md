@@ -214,3 +214,21 @@ unnecessary side effect on `threshold-tbtc-sepolia`).
 - **Open, unforced risk:** if the first `v*` tag is pushed before the `production` environment
   has a configured reviewer, the approval gate is a silent no-op and the mainnet deploy runs
   unattended. Mitigated: the reviewer was configured (see above) before any tag was pushed.
+- **Critical bug found on the first real merge-to-master deploy:** the PR #9 merge triggered
+  `deploy-sepolia.yaml` for real. It reported `success`, but the job log showed the actual
+  `graph deploy` call failed (`Deploy key not found`) with an `UNCAUGHT EXCEPTION` — yet
+  `graph-cli` 0.61.0 still exited `0`. Reproduced locally: an uncaught exception during
+  build/deploy does not reliably propagate a nonzero process exit code on this `graph-cli`
+  version (confirmed inconsistent — the same failure mode returned exit `0` once and exit `1`
+  on a second local repro). The retry-loop's `if command; then success; fi` pattern trusted the
+  exit code alone and was therefore unable to detect this class of failure — a real deploy
+  failure was reported green. Fixed in both `deploy-sepolia.yaml` and `deploy-mainnet.yaml`:
+  capture the command's output, and require *both* exit code `0` *and* the literal success
+  marker `graph-cli` only prints on its actual success path (`print.success(`Deployed to
+  ...`))`, sourced from `dist/commands/deploy.js`). This means CI can no longer report a false
+  green on a failed Studio deploy.
+- **Separately, the underlying deploy still needs a real fix:** the `Deploy key not found`
+  error itself indicates `GRAPH_DEPLOY_KEY_SEPOLIA`'s current value isn't recognized by Studio
+  at all (not merely wrong-subgraph-scoped) — likely a copy/paste or whitespace issue when the
+  secret was set. Needs re-setting with the exact deploy key from the `threshold-tbtc-sepolia`
+  Studio dashboard before the pipeline can actually ship anything to sepolia.

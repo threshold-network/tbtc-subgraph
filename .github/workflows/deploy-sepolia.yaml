@@ -53,15 +53,25 @@ jobs:
           fi
           for attempt in 1 2 3; do
             echo "::group::Deploy attempt $attempt"
-            if npx --no-install graph deploy \
+            set +e
+            output=$(npx --no-install graph deploy \
               --studio threshold-tbtc-sepolia \
               --deploy-key "$GRAPH_DEPLOY_KEY" \
               --version-label "${{ steps.version.outputs.label }}" \
-              --network sepolia; then
-              echo "::endgroup::"
+              --network sepolia 2>&1)
+            status=$?
+            set -e
+            echo "$output"
+            echo "::endgroup::"
+            # graph-cli 0.61.0 can exit 0 even after an uncaught exception
+            # (observed in production: a deploy that failed with "Deploy key
+            # not found" plus an UNCAUGHT EXCEPTION trace still returned exit
+            # code 0). Trust the exit code AND require the literal success
+            # marker graph-cli only prints on its real success path
+            # (dist/commands/deploy.js: print.success(`Deployed to ...`)).
+            if [ "$status" -eq 0 ] && printf '%s' "$output" | grep -q "Deployed to "; then
               exit 0
             fi
-            echo "::endgroup::"
             if [ "$attempt" -lt 3 ]; then
               sleep $((attempt * 15))
             fi
