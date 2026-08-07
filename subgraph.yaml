@@ -430,3 +430,154 @@ dataSources:
         - function: requestRedemption(bytes)
           handler: handleRequestRedemptionCall
       file: ./src/mappingL1BTCRedeemer.ts
+  # ---------------------------------------------------------------------------
+  # Routed-deposit L1 depositors. All inherit AbstractL1BTCDepositor and emit
+  # DepositInitialized/DepositFinalized(uint256 indexed depositKey, ..., address
+  # indexed l1Sender, ...) in two eras: the legacy overloads carry
+  # destinationChainDepositOwner as an indexed address, the current ones as an
+  # indexed bytes32. Both eras are handled (each datasource registers all four
+  # events; unused overloads simply never fire). The depositKey equals the
+  # Bridge Deposit id, so mappingRoutedDeposit attaches destinationOwner
+  # straight onto the existing Deposit. startBlocks are the per-contract deploy
+  # blocks.
+  # ---------------------------------------------------------------------------
+  - kind: ethereum
+    name: GaslessDepositor
+    network: mainnet
+    source:
+      abi: RoutedDepositor
+      address: "0xad7c6d46F4a4bc2D3A227067d03218d6D7c9aaa5"
+      startBlock: 23576205
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - Deposit
+      abis:
+        - name: RoutedDepositor
+          file: ./abis/RoutedDepositor.json
+      eventHandlers:
+        - event: DepositInitialized(indexed uint256,indexed bytes32,indexed address)
+          handler: handleRoutedDepositInitialized
+        - event: DepositFinalized(indexed uint256,indexed bytes32,indexed
+            address,uint256,uint256)
+          handler: handleRoutedDepositFinalized
+        - event: DepositInitialized(indexed uint256,indexed address,indexed address)
+          handler: handleLegacyRoutedDepositInitialized
+        - event: DepositFinalized(indexed uint256,indexed address,indexed
+            address,uint256,uint256)
+          handler: handleLegacyRoutedDepositFinalized
+      file: ./src/mappingRoutedDeposit.ts
+  - kind: ethereum
+    name: ArbitrumDepositor
+    network: mainnet
+    source:
+      abi: RoutedDepositor
+      address: "0x75A6e4A7C8fAa162192FAD6C1F7A6d48992c619A"
+      startBlock: 20632547
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - Deposit
+      abis:
+        - name: RoutedDepositor
+          file: ./abis/RoutedDepositor.json
+      eventHandlers:
+        - event: DepositInitialized(indexed uint256,indexed bytes32,indexed address)
+          handler: handleRoutedDepositInitialized
+        - event: DepositFinalized(indexed uint256,indexed bytes32,indexed
+            address,uint256,uint256)
+          handler: handleRoutedDepositFinalized
+        - event: DepositInitialized(indexed uint256,indexed address,indexed address)
+          handler: handleLegacyRoutedDepositInitialized
+        - event: DepositFinalized(indexed uint256,indexed address,indexed
+            address,uint256,uint256)
+          handler: handleLegacyRoutedDepositFinalized
+      file: ./src/mappingRoutedDeposit.ts
+  - kind: ethereum
+    name: BaseDepositor
+    network: mainnet
+    source:
+      abi: RoutedDepositor
+      address: "0x186D048097c7406C64EfB0537886E3CaE100a1fe"
+      startBlock: 21961116
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - Deposit
+      abis:
+        - name: RoutedDepositor
+          file: ./abis/RoutedDepositor.json
+      eventHandlers:
+        - event: DepositInitialized(indexed uint256,indexed bytes32,indexed address)
+          handler: handleRoutedDepositInitialized
+        - event: DepositFinalized(indexed uint256,indexed bytes32,indexed
+            address,uint256,uint256)
+          handler: handleRoutedDepositFinalized
+        - event: DepositInitialized(indexed uint256,indexed address,indexed address)
+          handler: handleLegacyRoutedDepositInitialized
+        - event: DepositFinalized(indexed uint256,indexed address,indexed
+            address,uint256,uint256)
+          handler: handleLegacyRoutedDepositFinalized
+      file: ./src/mappingRoutedDeposit.ts
+  - kind: ethereum
+    name: SuiDepositor
+    network: mainnet
+    source:
+      abi: RoutedDepositor
+      address: "0xb810AbD43d8FCFD812d6FEB14fefc236E92a341A"
+      startBlock: 22842726
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - Deposit
+      abis:
+        - name: RoutedDepositor
+          file: ./abis/RoutedDepositor.json
+      eventHandlers:
+        - event: DepositInitialized(indexed uint256,indexed bytes32,indexed address)
+          handler: handleRoutedDepositInitialized
+        - event: DepositFinalized(indexed uint256,indexed bytes32,indexed
+            address,uint256,uint256)
+          handler: handleRoutedDepositFinalized
+        - event: DepositInitialized(indexed uint256,indexed address,indexed address)
+          handler: handleLegacyRoutedDepositInitialized
+        - event: DepositFinalized(indexed uint256,indexed address,indexed
+            address,uint256,uint256)
+          handler: handleLegacyRoutedDepositFinalized
+      file: ./src/mappingRoutedDeposit.ts
+  - kind: ethereum
+    name: StarkNetDepositor
+    network: mainnet
+    source:
+      abi: RoutedDepositor
+      address: "0xC9031f76006da0BD4bFa9E02aDf0d448dB3BC155"
+      startBlock: 22671770
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - Deposit
+      abis:
+        - name: RoutedDepositor
+          file: ./abis/RoutedDepositor.json
+      eventHandlers:
+        - event: DepositInitialized(indexed uint256,indexed bytes32,indexed address)
+          handler: handleRoutedDepositInitialized
+        - event: DepositFinalized(indexed uint256,indexed bytes32,indexed
+            address,uint256,uint256)
+          handler: handleRoutedDepositFinalized
+        - event: DepositInitialized(indexed uint256,indexed address,indexed address)
+          handler: handleLegacyRoutedDepositInitialized
+        - event: DepositFinalized(indexed uint256,indexed address,indexed
+            address,uint256,uint256)
+          handler: handleLegacyRoutedDepositFinalized
+      file: ./src/mappingRoutedDeposit.ts

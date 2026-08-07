@@ -87,6 +87,21 @@ type Deposit @entity {
     sweptAt: BigInt
     depositTimestamp: BigInt
     updateTimestamp: BigInt
+
+    # --- Routed (gasless / direct-mint) destination ---
+    # Populated from the L1 depositor DepositInitialized/DepositFinalized events
+    # (see mappingRoutedDeposit). destinationOwner is the 32-byte indexed owner
+    # topic exactly as the dapp's normalizeDestinationTopic() produces it (EVM
+    # address left-padded to 32 bytes; Sui/StarkNet raw bytes32), so a
+    # `where: { destinationOwner: $owner }` lookup is a drop-in for the client's
+    # chunked eth_getLogs scan. Null for standard deposits.
+    destinationOwner: Bytes
+    # L1 msg.sender of the FIRST routed event seen for this deposit — the
+    # initializer when it is in range, otherwise the (permissionless, typically
+    # relayer) finalizer. Cheap to carry and useful for debugging/attribution.
+    l1Sender: Bytes
+    # True once a routed DepositInitialized/DepositFinalized has attached here.
+    isRouted: Boolean
 }
 
 type Redemption @entity {
