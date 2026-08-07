@@ -153,7 +153,7 @@ export function handleDepositRevealed(event: DepositRevealed): void {
     transaction.save()
 
     let bridgeContract = Bridge.bind(event.address)
-    let depositsContract = bridgeContract.deposits(Utils.hexToBigint(id.toHexString()))
+    let depositsContract = bridgeContract.deposits(Utils.byteArrayToBigint(id))
 
     let deposit = getOrCreateDeposit(Bytes.fromByteArray(id))    
     deposit.status = "REVEALED"
