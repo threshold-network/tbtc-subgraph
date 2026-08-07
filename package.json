@@ -5,7 +5,6 @@
     "codegen": "graph codegen",
     "build": "graph build",
     "build-sepolia": "graph build --network sepolia",
-    "deploy-sepolia": "graph deploy --studio threshold-tbtc-sepolia",
     "build-mainnet": "graph build --network mainnet",
     "deploy-mainnet": "graph deploy --studio tbtc-mainnet",
     "create-local": "graph create --node http://localhost:8020/ suntzu93/threshold-tbtc-goerli",

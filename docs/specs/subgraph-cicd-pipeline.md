@@ -25,8 +25,9 @@ An automated build-gate-and-deploy pipeline via GitHub Actions, modeled on
 
 - Every PR and every push to `master` runs a compile-only gate against both networks (sepolia
   and mainnet), so a broken manifest or mapping is caught before merge.
-- Every merge to `master` auto-deploys the `threshold-tbtc-sepolia` Studio subgraph — testnet
-  always reflects what's on `master`, no separate action required.
+- Sepolia is compile-checked only (part of the two-network build matrix) — it is not deployed
+  to a Studio subgraph. There is no known sepolia consumer and no sepolia Studio deploy key
+  (see Further Notes: sepolia deploy track dropped).
 - A mainnet release is an explicit, versioned act: pushing a `v*` git tag triggers a build gate,
   then pauses for manual approval in a GitHub Environment before deploying `tbtc-mainnet`.
 - Dependency vulnerabilities in this repo's own manifest are scanned on PRs (diff-aware) and on
@@ -38,30 +39,26 @@ An automated build-gate-and-deploy pipeline via GitHub Actions, modeled on
 
 1. As a contributor, I want my PR to fail fast if the subgraph doesn't compile for either
    network, so that I don't merge a broken manifest.
-2. As a maintainer, I want every merge to `master` to auto-deploy to the sepolia Studio
-   subgraph, so that testnet always reflects what's on `master` without a manual step.
-3. As a release manager, I want to cut a mainnet release by pushing a version tag, so that
+2. As a release manager, I want to cut a mainnet release by pushing a version tag, so that
    production deploys are versioned and reproducible.
-4. As a release manager, I want the mainnet deploy to pause for my explicit approval, so that a
+3. As a release manager, I want the mainnet deploy to pause for my explicit approval, so that a
    bad tag can't silently reach the production consumers already querying `tbtc-mainnet`.
-5. As an on-call engineer, I want a documented rollback procedure, so that I can recover quickly
+4. As an on-call engineer, I want a documented rollback procedure, so that I can recover quickly
    if a deploy misbehaves.
-6. As a security-conscious maintainer, I want dependency vulnerabilities introduced by this
+5. As a security-conscious maintainer, I want dependency vulnerabilities introduced by this
    repo's own manifest changes flagged on PRs, so that supply-chain risk doesn't creep in
    unnoticed.
-7. As a maintainer watching `master`, I want a full (non-diff-aware) vulnerability scan on every
+6. As a maintainer watching `master`, I want a full (non-diff-aware) vulnerability scan on every
    push, so that a newly-published advisory against an existing dependency still surfaces even
    without a PR touching the lockfile.
-8. As a new contributor, I want the README to describe the current deploy flow — not `goerli` or
+7. As a new contributor, I want the README to describe the current deploy flow — not `goerli` or
    `hosted-service` — so that I don't follow dead instructions.
-9. As a maintainer setting this up, I want a clear list of one-time setup steps (secrets,
+8. As a maintainer setting this up, I want a clear list of one-time setup steps (secrets,
    environment reviewers), so I know exactly what's required before the pipeline can run for
    real.
-10. As a maintainer, I want the mainnet and sepolia Studio deploy keys to be distinct secrets, so
-    that a lower-stakes credential can't reach the production subgraph.
-11. As a reviewer, I want a Studio deploy to retry a few times before failing the workflow, so
-    that transient IPFS/Studio flakiness doesn't demand a manual re-run for every hiccup.
-12. As a maintainer, I want the workflows to target the repo's actual default branch (`master`),
+9. As a reviewer, I want a Studio deploy to retry a few times before failing the workflow, so
+   that transient IPFS/Studio flakiness doesn't demand a manual re-run for every hiccup.
+10. As a maintainer, I want the workflows to target the repo's actual default branch (`master`),
     so triggers fire correctly rather than silently never matching.
 
 ## Implementation Decisions
@@ -74,10 +71,6 @@ An automated build-gate-and-deploy pipeline via GitHub Actions, modeled on
   succeed for this network" is the signal.
 - `ci.yaml` — triggers on `pull_request` and `push` to `master`. Matrix over
   `network: [sepolia, mainnet]`, each leg calling `ci-checks.yaml`.
-- `deploy-sepolia.yaml` — triggers on `push` to `master`. `checks` job (network: sepolia) then
-  `deploy` job, no approval gate. Deploy job independently checks out, installs, runs `codegen`,
-  then `npx --no-install graph deploy --studio threshold-tbtc-sepolia --deploy-key <key>
-  --version-label <label> --network sepolia`.
 - `deploy-mainnet.yaml` — triggers on `push` of a `v*` tag. `checks` job (network: mainnet) then
   a `deploy` job scoped to the `production` GitHub Environment (requires manual reviewer
   approval before the job starts), running the equivalent `graph deploy --studio tbtc-mainnet`
@@ -106,16 +99,15 @@ An automated build-gate-and-deploy pipeline via GitHub Actions, modeled on
 - Retry policy on Studio deploys: 3 attempts, sleeping `attempt * 15` seconds between retries
   (15s, 30s), scoped to the `graph deploy` step only — build/codegen failures fail immediately
   since retrying a deterministic compile error is pointless.
-- Version label scheme: sepolia deploys use `master-<short-sha>` (e.g. `master-e5606a6`);
-  mainnet deploys use the pushed tag name verbatim (e.g. `v1.2.3`) via `github.ref_name`.
+- Version label scheme: mainnet deploys use the pushed tag name verbatim (e.g. `v1.2.3`) via
+  `github.ref_name`.
 - Concurrency: `cancel-in-progress: true` for the `ci.yaml` compile gate (stale runs are cheap
-  to discard); `cancel-in-progress: false` for both deploy workflows (never cancel a `graph
-  deploy` mid-flight — queue instead of racing two deploys against the same Studio subgraph).
-- Secrets: `GRAPH_DEPLOY_KEY_SEPOLIA` as a repo-level secret; `GRAPH_DEPLOY_KEY_MAINNET` as an
-  environment-scoped secret on `production`, not a repo secret — Studio deploy keys are scoped
-  per-subgraph (confirmed: sepolia and mainnet are separate Studio subgraphs, each with its own
-  key), and scoping the mainnet key to the `production` environment means only a job that has
-  passed the environment's approval gate can ever read it.
+  to discard); `cancel-in-progress: false` for the `deploy-mainnet.yaml` workflow (never cancel
+  a `graph deploy` mid-flight — queue instead of racing two deploys against the same Studio
+  subgraph).
+- Secrets: `GRAPH_DEPLOY_KEY_MAINNET` as an environment-scoped secret on `production`, not a
+  repo secret — a job only reads it after that environment's approval gate passes. (Sepolia has
+  no deploy key: see Further Notes, sepolia deploy track dropped.)
 - `yarn.lock` was gitignored (no lockfile committed at all); un-ignored and committed so
   `--frozen-lockfile` installs are actually reproducible in CI rather than re-resolving the
   dependency graph on every run.
@@ -130,10 +122,10 @@ An automated build-gate-and-deploy pipeline via GitHub Actions, modeled on
 
 ## Testing Decisions
 
-Seam: static validation plus local dry-run of the exact commands each job executes — no live
-Studio deploy as part of verification (per interview: acceptable confidence for CI/CD config
-given no `GRAPH_DEPLOY_KEY_*` secrets exist yet, and a live test deploy would have a real,
-unnecessary side effect on `threshold-tbtc-sepolia`).
+Seam: static validation plus local dry-run of the exact commands each job executes. The deploy
+gate (tag-push → mainnet) has no live Studio test as part of verification — the correct fix for
+`GRAPH_DEPLOY_KEY_MAINNET` being a repo-level rather than environment-scoped secret requires only
+a re-set with `--env production`; no live deploy needed to validate the fix.
 
 - `actionlint` against every workflow file — real GitHub Actions schema/semantics validation,
   not just YAML syntax. Must pass with zero findings, including after `osv-scan.yaml` is added.
@@ -143,7 +135,7 @@ unnecessary side effect on `threshold-tbtc-sepolia`).
 - `npx --no-install graph --version` — confirms the binary the deploy steps depend on resolves
   from `node_modules/.bin` without a network fetch, i.e. the same resolution path
   `npx --no-install graph deploy ...` will use in CI.
-- `bash -n` against the retry-loop shell logic in both deploy workflows.
+- `bash -n` against the retry-loop shell logic in `deploy-mainnet.yaml`.
 - No test framework exists in this repo (no eslint/vitest/Matchstick config) and adding one is
   out of scope here — the compile-success signal above is the correctness gate this spec relies
   on, matching what the repo already has.
@@ -189,8 +181,6 @@ unnecessary side effect on `threshold-tbtc-sepolia`).
     state after their issue #149) — rejected: a subgraph serving other consumers' indexers
     carries a different risk profile than a static site redeploy, and the interview confirmed a
     manual gate is worth the one extra click per release.
-  - Tag-gating sepolia the same as mainnet — rejected in favor of continuous staging, so
-    testnet never silently lags behind what merged.
 - **Known risk, documented not automated:** `graph build --network <x>` / `graph deploy
   --network <x>` mutate the tracked `subgraph.yaml` in place, not just a build-output copy
   (confirmed by observation during design). Irrelevant inside CI (each job is a fresh, ephemeral
@@ -232,3 +222,17 @@ unnecessary side effect on `threshold-tbtc-sepolia`).
   at all (not merely wrong-subgraph-scoped) — likely a copy/paste or whitespace issue when the
   secret was set. Needs re-setting with the exact deploy key from the `threshold-tbtc-sepolia`
   Studio dashboard before the pipeline can actually ship anything to sepolia.
+- **Sepolia deploy track dropped (post-launch scope correction):** the maintainer confirmed
+  only a `tbtc-mainnet` Studio deploy key exists — no `threshold-tbtc-sepolia` key, and no
+  confirmed consumer of a sepolia Studio subgraph. Rather than leave `deploy-sepolia.yaml`
+  permanently red waiting on a credential that may never materialize, the sepolia deploy track
+  was removed entirely: `deploy-sepolia.yaml` deleted, `package.json`'s `deploy-sepolia` script
+  removed, and `docs/deployment.md` rewritten to describe a single mainnet-only deploy track.
+  Sepolia is kept in `ci.yaml`'s compile-only build matrix (zero credential cost, still catches
+  multi-network compile regressions on every PR). This supersedes every earlier reference in
+  this spec's Solution/User Stories/Implementation Decisions to a sepolia auto-deploy — those
+  sections were edited in place rather than left contradicting current behavior. The prior
+  incident entries above (deploy-key-not-found, the false-success detection bug) remain as the
+  historical record of what actually happened before this track was cut; they are not
+  retroactively false, just describing a track that no longer exists. The now-unused
+  `GRAPH_DEPLOY_KEY_SEPOLIA` repo secret should be deleted as part of this cleanup.
