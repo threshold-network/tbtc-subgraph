@@ -1,0 +1,69 @@
+name: Deploy Mainnet
+
+# Versioned release: pushing a v* tag on master triggers a build-and-checks
+# gate, then pauses for manual approval (the `production` GitHub Environment)
+# before deploying to the tbtc-mainnet Studio subgraph. Cut a release with:
+#   git tag vX.Y.Z && git push origin vX.Y.Z
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+# Never cancel a deploy mid-flight.
+concurrency:
+  group: deploy-mainnet
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci-checks.yaml
+    with:
+      network: mainnet
+
+  deploy:
+    name: Deploy to Graph Studio (mainnet)
+    needs: [checks]
+    runs-on: ubuntu-latest
+    # Requires a reviewer to approve in the `production` environment before
+    # this job runs. Configure required reviewers under Settings > Environments
+    # > production in the repo — the workflow alone does not name who approves.
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: yarn
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+      - name: Codegen
+        run: yarn codegen
+      - name: Deploy to Studio
+        env:
+          GRAPH_DEPLOY_KEY: ${{ secrets.GRAPH_DEPLOY_KEY_MAINNET }}
+        run: |
+          if [ -z "$GRAPH_DEPLOY_KEY" ]; then
+            echo "::error::GRAPH_DEPLOY_KEY_MAINNET secret is not set"
+            exit 1
+          fi
+          for attempt in 1 2 3; do
+            echo "::group::Deploy attempt $attempt"
+            if npx --no-install graph deploy \
+              --studio tbtc-mainnet \
+              --deploy-key "$GRAPH_DEPLOY_KEY" \
+              --version-label "${{ github.ref_name }}" \
+              --network mainnet; then
+              echo "::endgroup::"
+              exit 0
+            fi
+            echo "::endgroup::"
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((attempt * 15))
+            fi
+          done
+          echo "::error::All deploy attempts failed"
+          exit 1

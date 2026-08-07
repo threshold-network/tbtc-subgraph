@@ -2,6 +2,5 @@
 /build
 /generated
 yarn-error.log
-yarn.lock
 .idea
 package-lock.json

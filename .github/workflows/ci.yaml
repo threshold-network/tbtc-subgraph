@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+# Deny-all baseline: every job here is read-only (reusable build checks).
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    strategy:
+      matrix:
+        network: [sepolia, mainnet]
+    uses: ./.github/workflows/ci-checks.yaml
+    with:
+      network: ${{ matrix.network }}

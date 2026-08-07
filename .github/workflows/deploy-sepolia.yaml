@@ -1,0 +1,70 @@
+name: Deploy Sepolia
+
+# Continuous staging: every merge to master redeploys threshold-tbtc-sepolia,
+# so master always reflects what Studio serves for the testnet subgraph.
+# Studio subgraphs can't be created dynamically per PR via the CLI (they're
+# created once via the Studio web UI), so there is no per-PR preview here —
+# master itself is the shared staging target.
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+# Never cancel a deploy mid-flight; queue instead of racing two `graph deploy`
+# runs against the same Studio subgraph.
+concurrency:
+  group: deploy-sepolia
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci-checks.yaml
+    with:
+      network: sepolia
+
+  deploy:
+    name: Deploy to Graph Studio (sepolia)
+    needs: [checks]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: yarn
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+      - name: Codegen
+        run: yarn codegen
+      - name: Resolve version label
+        id: version
+        run: echo "label=master-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Deploy to Studio
+        env:
+          GRAPH_DEPLOY_KEY: ${{ secrets.GRAPH_DEPLOY_KEY_SEPOLIA }}
+        run: |
+          if [ -z "$GRAPH_DEPLOY_KEY" ]; then
+            echo "::error::GRAPH_DEPLOY_KEY_SEPOLIA secret is not set"
+            exit 1
+          fi
+          for attempt in 1 2 3; do
+            echo "::group::Deploy attempt $attempt"
+            if npx --no-install graph deploy \
+              --studio threshold-tbtc-sepolia \
+              --deploy-key "$GRAPH_DEPLOY_KEY" \
+              --version-label "${{ steps.version.outputs.label }}" \
+              --network sepolia; then
+              echo "::endgroup::"
+              exit 0
+            fi
+            echo "::endgroup::"
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((attempt * 15))
+            fi
+          done
+          echo "::error::All deploy attempts failed"
+          exit 1
