@@ -130,6 +130,75 @@ type CrossChainRedemptionTracker @entity {
     processed: Boolean!             # Whether linked to redemption
 }
 
+# C-1 prep: scheme classification for wallets. ECDSA wallets are
+# created via the legacy ECDSA wallet registry; FROST wallets are
+# created via the FROST wallet registry (B-1) and register through
+# `Bridge.__frostWalletCreatedCallback`. Defaults to ECDSA for
+# pre-#431 records.
+enum WalletScheme {
+    ECDSA
+    FROST
+}
+
+type Wallet @entity {
+    # Canonical wallet ID. For legacy wallets, this is the left-padded walletPubKeyHash.
+    id: Bytes!
+    walletID: Bytes!
+    ecdsaWalletID: Bytes!
+    walletPubKeyHash: Bytes!
+    registeredAt: BigInt!
+    registeredAtBlock: BigInt!
+    transactionHash: Bytes!
+    # C-1 prep: defaults to ECDSA for pre-#431 records. Populated
+    # at registration time via the matching handler:
+    # `handleNewWalletRegistered` (= ECDSA) /
+    # `handleNewFrostWalletRegistered` (= FROST).
+    scheme: WalletScheme!
+    # FROST-only: the 32-byte x-only Taproot output key. Null for
+    # ECDSA wallets.
+    xOnlyOutputKey: Bytes
+}
+
+# C-1 prep: singleton entity tracking Bridge governance state
+# that is hard to derive from individual events alone
+# (currently-selected scheme; addresses of the
+# governance-configured routers). The singleton uses a fixed id
+# `"singleton"`.
+#
+# RFC v6 also specified counter + seed fields (`ecdsaWalletCount`,
+# `ecdsaWalletCountSeeded`, `historicalSeedAmount`, the seed
+# timestamps), but the matching on-chain mechanism is deferred
+# from the C-2 PR (#439) for bytecode-budget reasons; the C-1.1c
+# follow-up will re-add these fields alongside the new
+# `handleEcdsaWalletCountSeeded` handler that uses
+# `event.params.totalAfterSeed` for idempotent absolute-set
+# (per Codex P2 feedback on the earlier C-1.1a iteration).
+type BridgeState @entity {
+    id: ID!
+    # C-2: current default scheme used by `requestNewWallet`.
+    # Defaults to ECDSA at C-2 activation. Updated by
+    # `handleNewWalletSchemeSet`.
+    currentScheme: WalletScheme!
+    # Governance-configured router / registry addresses. Each is
+    # null until the matching one-time setter event fires.
+    frostWalletRegistry: Bytes
+    ecdsaFraudRouter: Bytes
+    p2trFraudRouter: Bytes
+    lifecycleRouter: Bytes
+}
+
+# C-1 prep: append-only audit log of scheme flips. Each entry is
+# created by `handleNewWalletSchemeSet`; useful for governance
+# review.
+type WalletSchemeChange @entity {
+    id: ID!
+    scheme: WalletScheme!
+    changedAt: BigInt!
+    changedAtBlock: BigInt!
+    transactionHash: Bytes!
+}
+
+
 type TBTCToken @entity{
     "TBTCToken"
     id: ID!
