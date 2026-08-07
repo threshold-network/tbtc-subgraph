@@ -2,8 +2,8 @@
 # There is no lint/test suite in this repo (no eslint/vitest config) — the
 # meaningful gate for a subgraph is "does codegen + graph build succeed",
 # i.e. do schema.graphql, the ABIs, and the AssemblyScript mappings agree.
-# Used by ci.yaml (PR + master, both networks) and by each deploy workflow's
-# own `checks` job (single network matching that deploy target).
+# Used by ci.yaml (PR + master, both networks) and by deploy-mainnet.yaml's own
+# `checks` job (mainnet only, matching that deploy target).
 name: CI Checks
 
 on:
