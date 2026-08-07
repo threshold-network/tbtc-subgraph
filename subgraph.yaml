@@ -1,8 +1,8 @@
 specVersion: 0.0.5
 schema:
   file: ./schema.graphql
-features:
-  - fullTextSearch
+# features:
+#   - fullTextSearch  # Disabled for local testing
 dataSources:
   - kind: ethereum
     name: Bridge
@@ -367,3 +367,32 @@ dataSources:
         - event: Unbanned(indexed address)
           handler: handleUnbanned
       file: ./src/mappingRedemptionWatchtower.ts
+  - kind: ethereum
+    name: L1BTCRedeemerWormhole
+    network: mainnet
+    source:
+      abi: L1BTCRedeemerWormhole
+      address: "0x5D4d83aaB53B7E7cA915AEB2d4d3f4e03823DbDe"
+      startBlock: 18500000
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - Redemption
+        - WormholeSender
+        - CrossChainRedemptionTracker
+      abis:
+        - name: L1BTCRedeemerWormhole
+          file: ./abis/L1BTCRedeemerWormhole.json
+        - name: Bridge
+          file: ./abis/Bridge.json
+      eventHandlers:
+        - event: RedemptionRequested(indexed bytes32,indexed bytes20,(bytes32,uint32,uint64),bytes,uint64)
+          handler: handleWormholeRedemptionRequested
+        - event: AllowedSenderUpdated(indexed bytes32,bool)
+          handler: handleAllowedSenderUpdated
+      callHandlers:
+        - function: requestRedemption(bytes)
+          handler: handleRequestRedemptionCall
+      file: ./src/mappingL1BTCRedeemer.ts

@@ -16,13 +16,33 @@ enum RedemptionStatus {
     VETOED #-> redemptionWatchTower.raiseObjection()
 }
 
-type _Schema_
-@fulltext(
-    name: "searchRedemption"
-    language: en
-    algorithm: rank
-    include: [{ entity: "Redemption", fields: [{ name: "id" }] }]
-)
+# Wormhole chain IDs for cross-chain redemption tracking
+enum WormholeChain {
+    UNKNOWN
+    SOLANA          # Chain ID: 1
+    ETHEREUM        # Chain ID: 2
+    BSC             # Chain ID: 4
+    POLYGON         # Chain ID: 5
+    AVALANCHE       # Chain ID: 6
+    FANTOM          # Chain ID: 10
+    KLAYTN          # Chain ID: 13
+    CELO            # Chain ID: 14
+    MOONBEAM        # Chain ID: 16
+    SUI             # Chain ID: 21
+    ARBITRUM        # Chain ID: 23
+    OPTIMISM        # Chain ID: 24
+    BASE            # Chain ID: 30
+    STARKNET        # Chain ID: 10006
+}
+
+# Fulltext search removed for local testing (causes non-determinism error in graph-node)
+# type _Schema_
+# @fulltext(
+#     name: "searchRedemption"
+#     language: en
+#     algorithm: rank
+#     include: [{ entity: "Redemption", fields: [{ name: "id" }] }]
+# )
 
 type Transaction @entity {
     id: ID!
@@ -84,8 +104,31 @@ type Redemption @entity {
     transactions: [Transaction!]!
     redemptionTimestamp: BigInt
     updateTimestamp: BigInt!
+    # Cross-chain origin tracking for L2 redemptions via Wormhole
+    sourceChainId: Int              # Wormhole chain ID (null = Ethereum native)
+    sourceChain: WormholeChain      # Human-readable chain enum
+    wormholeSequence: BigInt        # Wormhole message sequence number
 }
 
+# Track allowed Wormhole senders for cross-chain redemptions
+type WormholeSender @entity {
+    id: ID!                         # Sender address (bytes32 as hex)
+    chainId: Int!                   # Wormhole chain ID
+    chain: WormholeChain!           # Human-readable chain
+    allowed: Boolean!               # Whether currently allowed
+    addedAt: BigInt!                # Block timestamp when added
+    updatedAt: BigInt!              # Last update timestamp
+}
+
+# Temporary tracker for linking VAA data to redemptions
+type CrossChainRedemptionTracker @entity {
+    id: ID!                         # Transaction hash
+    sourceChainId: Int!             # Wormhole chain ID from VAA
+    sourceChain: WormholeChain!     # Human-readable chain
+    emitterAddress: Bytes!          # L2BitcoinRedeemer address (bytes32)
+    sequence: BigInt!               # Wormhole message sequence
+    processed: Boolean!             # Whether linked to redemption
+}
 
 type TBTCToken @entity{
     "TBTCToken"
