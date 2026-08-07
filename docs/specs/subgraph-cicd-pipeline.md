@@ -174,12 +174,14 @@ unnecessary side effect on `threshold-tbtc-sepolia`).
 
 ## Further Notes
 
-- **Implementation status at time of writing:** `ci-checks.yaml`, `ci.yaml`,
-  `deploy-sepolia.yaml`, `deploy-mainnet.yaml`, and `docs/deployment.md` already exist locally
-  (uncommitted) and have passed the validation listed under Testing Decisions. `osv-scan.yaml`
-  and the `README.md` trim are decided here but not yet built. Next step: an implementation
-  pass to add those two remaining pieces, then commit and open a PR (not push directly to
-  `master` — per this repo's push/PR confirmation policy).
+- **Implementation status (updated after PR #9):** all workflow files, `docs/deployment.md`,
+  and the `README.md` trim are implemented and merged into a PR. The `production` GitHub
+  Environment and its required reviewer (`piotr-roslaniec`) were created via `gh api`.
+  `GRAPH_DEPLOY_KEY_SEPOLIA` and `GRAPH_DEPLOY_KEY_MAINNET` secrets are set — though
+  `GRAPH_DEPLOY_KEY_MAINNET` landed as a repo-level secret rather than the intended
+  environment-scoped secret on `production` (functionally fine, since environment-scoped jobs
+  fall back to repo secrets of the same name; the intended isolation just isn't in effect yet).
+  Follow-up: re-set it with `--env production` and delete the repo-level copy.
 - **Alternatives considered:**
   - A single shared deploy key across both Studio subgraphs — not actually available; Studio
     scopes deploy keys per-subgraph, so this was ruled out by the platform, not by preference.
@@ -195,7 +197,20 @@ unnecessary side effect on `threshold-tbtc-sepolia`).
   checkout), but a maintainer building locally across networks should `git checkout --
   subgraph.yaml` between network switches to avoid accidentally committing a network swap.
   Worth a one-line callout in `docs/deployment.md` if not already present.
+- **Correction discovered on first real PR run:** `osv-scan.yaml`'s diff-aware PR scan
+  (`fail-on-vuln: true`, the reusable workflow's default) failed on the very PR that introduced
+  it — 19 packages / 69 known vulnerabilities, entirely inherited transitives of `graph-cli`
+  0.61.0 (`axios` 0.21.4, `tar` 6.2.1, `protobufjs` 6.11.6, `uuid` 3.4.0/8.3.2, `request`
+  2.88.2, and others). This wasn't a false positive: because `master` had no lockfile at all
+  before this PR, the scanner's base-branch diff treats the entire newly-added `yarn.lock` as
+  "introduced" by the PR, so 100% of graph-cli's pre-existing dependency debt surfaced as new.
+  Several of the available fixes are major-version bumps on packages graph-cli's own runtime
+  depends on (IPFS client, protobuf encoding) — forcing yarn resolutions on them without a live
+  Studio deploy to catch a regression was judged too risky to do blind as part of a CI/CD PR.
+  Resolution: set `fail-on-vuln: false` on both `osv-scan.yaml` jobs, so findings stay visible
+  (job log/artifact) without blocking merges. Tracked as follow-up debt: a `graph-cli` upgrade
+  (separate, larger, needs its own live-deploy verification) is the real fix, not a resolutions
+  hack applied here.
 - **Open, unforced risk:** if the first `v*` tag is pushed before the `production` environment
   has a configured reviewer, the approval gate is a silent no-op and the mainnet deploy runs
-  unattended. This is called out in `docs/deployment.md`'s required-configuration section, but
-  nothing in the pipeline itself detects or blocks an unconfigured environment.
+  unattended. Mitigated: the reviewer was configured (see above) before any tag was pushed.
