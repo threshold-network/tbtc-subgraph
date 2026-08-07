@@ -151,27 +151,29 @@ export function handleMinted(event: Minted): void {
     tBtcToken.totalSupply = tBtcToken.totalSupply.plus(event.params.amount)
     tBtcToken.save()
 
-    //Reset lastMintedInfo when handle diff transaction
+    // Reset the per-transaction mint list when a new transaction starts.
     let status = getStatus()
     if (status.lastMintedHash.toHexString().toLowerCase() !== event.transaction.hash.toHexString().toLowerCase()) {
-        if (status.lastMintedInfo.length > 0) {
-            status.lastMintedInfo = []
-            status.save()
-        }
+        status.lastMintedInfo = []
+        status.lastMintedHash = event.transaction.hash
     }
 
-    // Update actualAmountReceived in case tBTC mint
-    // happening under the hood given that sweeping can also result in minting if, for the given revealed deposit, minters did not mint tBTC
+    // Accumulate every mint in this transaction, in log order, so the sweep call
+    // handler can map each swept deposit to its own mint. A batched sweep mints
+    // several deposits for the same depositor, so overwriting here (the previous
+    // behaviour) collapsed them all to the last mint.
     if (event.params.amount.gt(Const.ZERO_BI)) {
         let userDepositAmount = event.params.to.toHexString().concat("-").concat(event.params.amount.toString())
-        let lastMintedInfo: Array<string> = []
+        let lastMintedInfo = status.lastMintedInfo
         lastMintedInfo.push(userDepositAmount)
-
-        let status = getStatus()
         status.lastMintedInfo = lastMintedInfo
-        status.lastMintedHash = event.transaction.hash
-        status.save()
     }
+
+    // Persist once. A single unconditional save ensures the reset above is
+    // always stored, including a new-transaction mint with amount == 0 that
+    // skips the accumulate branch (which would otherwise leave a stale
+    // lastMintedHash/lastMintedInfo for the next mint).
+    status.save()
 
 }
 

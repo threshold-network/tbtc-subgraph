@@ -106,6 +106,21 @@ function parseDepositSweepTxInputAt(
     };
 }
 
+// Maps each swept deposit to the mint it received by draining the
+// per-transaction lastMintedInfo accumulated by handleMinted.
+//
+// This relies on two ordering invariants that are NOT enforced here and have
+// no automated test; breaking either silently mis-pairs deposits and mint
+// amounts:
+//   1. Trigger ordering: this SubmitDepositSweepProof *call* handler runs
+//      after the same-transaction Minted *event* handlers, so lastMintedInfo
+//      is already populated for this transaction when we read it below. (A
+//      sweep proof and its mints share one transaction.)
+//   2. Per-depositor ordering: for a depositor with multiple deposits in one
+//      batch, the k-th Minted event (log order) corresponds to that
+//      depositor's k-th deposit (sweep-input order). The consume-once
+//      mintedConsumed bookkeeping below depends on this to hand out mints in
+//      order rather than always matching the first.
 export function processDepositSweepTxInputs(
     call: SubmitDepositSweepProofCall
 ): void {
@@ -118,6 +133,10 @@ export function processDepositSweepTxInputs(
 
     let status = getStatus();
     let lastMintedInfo = status.lastMintedInfo
+    // Track which accumulated mints have already been claimed so that a batched
+    // sweep minting several deposits for the same depositor assigns each deposit
+    // its own mint (in order) instead of repeatedly matching the first one.
+    let mintedConsumed = new Array<bool>(lastMintedInfo.length)
 
     for (let i: i32 = 0; i < inputsCount.toI32(); i++) {
         let parseDepositSweepTxInput = parseDepositSweepTxInputAt(call.inputs.sweepTx.inputVector, inputStartingIndex);
@@ -137,14 +156,29 @@ export function processDepositSweepTxInputs(
 
             let actualAmountReceived: BigInt = Const.ZERO_BI;
             let user = getOrCreateUser(deposit.user);
-            for (let j: i32 = 0; j < lastMintedInfo.length; j++) {
-                let mintedData = lastMintedInfo[j].split("-");
-                let depositor = mintedData[0];
-                let amount = mintedData[1];
+            // Only deposits not already valued consume an accumulated mint. A
+            // deposit finalised earlier by optimistic minting already has a
+            // non-zero actualAmountReceived; if it still scanned lastMintedInfo
+            // it would match by depositor and consume the entry a sibling
+            // regular deposit in the same batch needs, stranding that sibling
+            // at 0. (The optimistic deposit's own Minted event fired in an
+            // earlier transaction and was reset out of lastMintedInfo.)
+            if (deposit.actualAmountReceived.equals(Const.ZERO_BI)) {
+                for (let j: i32 = 0; j < lastMintedInfo.length; j++) {
+                    if (mintedConsumed[j]) {
+                        continue
+                    }
+                    let mintedData = lastMintedInfo[j].split("-");
+                    let depositor = mintedData[0];
+                    let amount = mintedData[1];
 
-                if (depositor.toLowerCase() == user.id.toHexString().toLowerCase()) {
-                    actualAmountReceived = BigInt.fromString(amount);
-                    break
+                    if (depositor.toLowerCase() == user.id.toHexString().toLowerCase()) {
+                        actualAmountReceived = BigInt.fromString(amount);
+                        // Claim this mint so another deposit swept for the same
+                        // depositor in this batch takes the next one, in order.
+                        mintedConsumed[j] = true
+                        break
+                    }
                 }
             }
 
@@ -157,6 +191,7 @@ export function processDepositSweepTxInputs(
             if (deposit.actualAmountReceived.equals(Const.ZERO_BI)){
                 deposit.actualAmountReceived = actualAmountReceived
             }
+
             deposit.save()
 
         }
