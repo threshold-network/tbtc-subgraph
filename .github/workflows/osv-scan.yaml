@@ -1,0 +1,49 @@
+name: OSV-Scanner
+
+# Supply-chain vulnerability gate: runs OSV-Scanner against yarn.lock.
+# Third-party reusable workflow pinned to a full commit SHA; top-level
+# permissions are deny-all, each job opts into only the minimum scopes it
+# needs. Mirrors tlabs-xyz/vba-dashboard's osv-scan.yaml, adapted for yarn.
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions: {}
+
+jobs:
+  # Diff-aware scan on PRs: fails only on vulnerabilities the PR *introduces*,
+  # so pre-existing advisories in graph-cli's own dependency tree don't block
+  # unrelated work.
+  scan-pr:
+    if: github.event_name == 'pull_request'
+    permissions:
+      actions: read
+      contents: read
+      # Required: the reusable workflow declares a security-events:write
+      # ceiling (for its SARIF-upload step). GitHub validates that ceiling
+      # against the caller's grant at scheduling time, so it must be granted
+      # even with upload-sarif:false — otherwise the job fails with
+      # startup_failure.
+      security-events: write
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@9a498708959aeaef5ef730655706c5a1df1edbc2
+    with:
+      scan-args: |-
+        --lockfile=./yarn.lock
+      upload-sarif: false
+
+  # Full scan on pushes to master.
+  scan-full:
+    if: github.event_name == 'push'
+    permissions:
+      actions: read
+      contents: read
+      # See scan-pr: the reusable workflow's declared security-events:write
+      # ceiling must be granted here too or the job hits startup_failure.
+      security-events: write
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@9a498708959aeaef5ef730655706c5a1df1edbc2
+    with:
+      scan-args: |-
+        --lockfile=./yarn.lock
+      upload-sarif: false

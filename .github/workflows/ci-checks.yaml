@@ -1,0 +1,37 @@
+# Reusable workflow: validates the subgraph compiles for a given network.
+# There is no lint/test suite in this repo (no eslint/vitest config) — the
+# meaningful gate for a subgraph is "does codegen + graph build succeed",
+# i.e. do schema.graphql, the ABIs, and the AssemblyScript mappings agree.
+# Used by ci.yaml (PR + master, both networks) and by each deploy workflow's
+# own `checks` job (single network matching that deploy target).
+name: CI Checks
+
+on:
+  workflow_call:
+    inputs:
+      network:
+        description: 'Network to build against (sepolia | mainnet)'
+        required: true
+        type: string
+      node_version:
+        type: string
+        default: '22'
+
+jobs:
+  checks:
+    name: Build (${{ inputs.network }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: yarn
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+      - name: Codegen
+        run: yarn codegen
+      - name: Build subgraph manifest
+        run: yarn run build-${{ inputs.network }}
