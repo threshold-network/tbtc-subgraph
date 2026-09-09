@@ -23,6 +23,17 @@ regressions; nothing deploys it anywhere.
 
 ## Promotion path
 
+**Before pushing a release tag or approving the production deploy**, record the live
+deployment hash and securely retain its query URL for rollback. Confirm the Worker uses a
+published gateway endpoint pinned to that deployment (see [Consumer cutover](#consumer-cutover)).
+If production still serves an unpublished Studio version, publish that existing version,
+validate its gateway endpoint, and cut the consumer over to it **before deploying a replacement**.
+
+Studio [automatically archives previous unpublished versions when a new version is deployed](https://thegraph.com/docs/en/subgraphs/developing/deploying-publishing/using-subgraph-studio/#automatic-archiving-of-subgraph-versions),
+making them unqueryable even if they were receiving production traffic. Keep the currently
+served published deployment indexed and queryable throughout the replacement's full re-sync,
+and retain it for rollback.
+
 1. Merge feature PRs into `master` (gated by `ci.yaml`, matrix over both networks).
 2. Cut a release by tagging a commit on `master` and pushing the tag:
    ```
@@ -32,7 +43,7 @@ regressions; nothing deploys it anywhere.
    This triggers `deploy-mainnet.yaml`, which builds/checks against `mainnet`, then pauses on
    the `production` GitHub Environment for manual approval before running `graph deploy` against
    `tbtc-mainnet`. The tag name is used verbatim as the Studio version label.
-3. Wait for the new version to finish indexing in Studio before doing anything else. There is
+3. Wait for the new version to finish indexing in Studio before publishing it. There is
    no graft in `subgraph.yaml`, so every deploy is a **full re-sync from the earliest
    `startBlock` in `networks.json`** (mainnet: block 13,042,356, the TBTC token). That is
    ~13M blocks with call handlers that make `eth_call`s per sweep — budget hours to days, not
@@ -53,8 +64,9 @@ regressions; nothing deploys it anywhere.
 > **A Studio deploy is only half a release.** `v0.49.0` (2026-08-07) built and deployed to
 > Studio successfully, but the consumer was never repointed at it, so production continued to
 > serve the previous deployment — including the `treasuryFee = 0` bug that release fixed. The
-> unqueried Studio version was later no longer resolvable (Studio archives versions that
-> receive no traffic), so the work had to be redone. Steps 3-5 exist to prevent that.
+> version's Studio URL later became unqueryable, so the release had to be revisited. Steps
+> 3-5 and the pre-deploy check above exist to prevent an incomplete release or an interruption
+> of the live upstream.
 
 ## Consumer cutover
 
@@ -75,26 +87,32 @@ that network.
 
 Once the new Studio version has fully synced:
 
-1. Point the secret at the new version's query URL (run from a `tlabs-xyz/threshold-api`
+1. **Publish the version to the decentralized network** from Studio, following
+   [The Graph's publishing procedure](https://thegraph.com/docs/en/subgraphs/developing/deploying-publishing/publishing-a-subgraph/).
+   Production must use a published gateway endpoint pinned to the version's
+   [deployment ID](https://thegraph.com/docs/en/subgraphs/querying/subgraph-id-vs-deployment-id/)
+   (`/deployments/id/<DEPLOYMENT_ID>`). A `/subgraphs/id/<SUBGRAPH_ID>` URL can follow later
+   versions automatically, bypassing this manual cutover and rollback procedure.
+2. Query that gateway endpoint directly with the `_meta` query in
+   [Verifying a release is live](#verifying-a-release-is-live). Wait until it reports the
+   intended deployment hash, a block at chain head, and `hasIndexingErrors: false`.
+   Network indexers may still be syncing after Studio is ready. Keep production on the
+   previous published endpoint until these checks pass.
+3. Point the secret at the verified, deployment-pinned gateway URL (run from a `tlabs-xyz/threshold-api`
    checkout; requires Cloudflare access to the `threshold-api` Worker):
    ```
    wrangler secret put SUBGRAPH_GATEWAY_URL_MAINNET --env production
    ```
-2. Redeploy the Worker so the change takes effect:
-   ```
-   bun run deploy:production
-   ```
-3. Responses are cached in the Cloudflare Cache API for `SUBGRAPH_CACHE_TTL_SECONDS`
+   [`wrangler secret put` creates a Worker version and deploys it immediately](https://developers.cloudflare.com/workers/configuration/secrets/#via-wrangler),
+   so no separate Worker code deployment is needed for cutover or rollback.
+4. Responses are cached in the Cloudflare Cache API for `SUBGRAPH_CACHE_TTL_SECONDS`
    (default **30s**), so stale pre-cutover responses drain on their own within a minute. To
    drop them immediately instead, bump `SUBGRAPH_CACHE_KEY_VERSION` (default `v1`) in
-   `[env.production.vars]` in `wrangler.toml` and redeploy.
+   `[env.production.vars]` in `wrangler.toml` as an intentional, reviewed Worker configuration
+   release. Reserve `bun run deploy:production` for such code/configuration releases: it uploads
+   the local checkout's Worker code and configuration.
 
 Repeat with `--env staging` if the staging Worker should track the same version.
-
-**Prefer publishing to the decentralized network** over leaving a release only in Studio. A
-Studio version that nothing queries can be archived, which is what happened to `v0.49.0`. If
-the release is published from Studio to the network and the Worker secret points at the
-resulting gateway URL, the deployment is not subject to Studio archiving.
 
 **Breaking changes.** The Worker forwards GraphQL verbatim and does not validate against a
 schema, so a schema change that removes or renames a field surfaces as a query error in the
@@ -115,9 +133,10 @@ curl -s -X POST https://api.threshold.network/subgraph/mainnet \
 
 Confirm all three:
 
-1. `_meta.deployment` is the deployment hash the deploy job's `Build completed: Qm...` line
-   printed, and **not** the hash that was live before the cutover. (The job's `Deployed to ...`
-   line is only the Studio dashboard URL, not the hash.)
+1. `_meta.deployment` matches the intended deployment hash from the deploy job's
+   `Build completed: Qm...` line. (The job's `Deployed to ...` line is only the Studio dashboard
+   URL, not the hash.) When migrating the existing live version to a published endpoint in
+   the pre-deploy check, this must still be the recorded pre-migration hash.
 2. `_meta.block.number` is at chain head and `hasIndexingErrors` is `false`.
 3. A field or entity introduced by the release actually resolves. A schema addition is the
    cheapest positive signal that the new mappings are live — e.g. after a release that adds
@@ -145,15 +164,17 @@ someone who has it.
 
 ## Rollback
 
-- Re-tag the last-good commit with a new `v*` tag and push it — the workflow is tag-driven, so a
-  corrective tag redeploys the known-good manifest/mappings to `tbtc-mainnet`. Do not delete or
-  reuse the bad tag.
-- A previous deployment can also be re-promoted directly from the Graph Studio dashboard if a
-  redeploy is not immediate.
-- Either way the rollback is not live until the consumer points at it: re-run
-  [Consumer cutover](#consumer-cutover) against the rolled-back version's URL. If the previous
-  version is still synced and reachable, repointing the Worker secret back at it is the fastest
-  rollback available, since it needs no re-sync.
+- If the previous published deployment is still synced and reachable, validate its retained,
+  deployment-pinned gateway URL and restore it with `wrangler secret put` as described in
+  [Consumer cutover](#consumer-cutover). This activates the rollback without a re-sync or a
+  separate Worker code deployment. Verify the previous deployment hash through the proxy
+  with the cache bypass described above.
+- If the previous deployment is unavailable, follow the pre-deploy check in
+  [Promotion path](#promotion-path), then re-tag the last-good commit with a new `v*` tag and
+  push it. The workflow redeploys the known-good manifest/mappings to `tbtc-mainnet`; wait for
+  syncing, publish, validate the gateway endpoint, and cut the consumer over as for a release.
+  Do not delete or reuse the bad tag. A Studio redeploy or dashboard promotion alone does not
+  change the Worker's pinned upstream.
 - Note that a subgraph redeploy only changes what new indexing runs from `startBlock` onward if
   the manifest/mappings changed; it does not retroactively fix already-indexed data other than
   by triggering a full re-sync from the pinned `startBlock` in `networks.json`.
