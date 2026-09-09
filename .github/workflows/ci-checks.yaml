@@ -1,9 +1,10 @@
 # Reusable workflow: validates the subgraph compiles for a given network.
-# There is no lint/test suite in this repo (no eslint/vitest config) — the
-# meaningful gate for a subgraph is "does codegen + graph build succeed",
+# The mappings have no unit-test suite — the meaningful compile gate for a
+# subgraph is "does codegen + graph build succeed",
 # i.e. do schema.graphql, the ABIs, and the AssemblyScript mappings agree.
 # Used by ci.yaml (PR + master, both networks) and by deploy-mainnet.yaml's own
 # `checks` job (mainnet only, matching that deploy target).
+# Cutover checker regression tests run separately in ci.yaml.
 name: CI Checks
 
 on:

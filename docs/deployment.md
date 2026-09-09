@@ -16,10 +16,9 @@ key, and reintroduce a `deploy-sepolia.yaml` workflow mirroring `deploy-mainnet.
 | Mainnet  | `tbtc-mainnet`  | `.github/workflows/deploy-mainnet.yaml`  | push of a `v*` tag     | build check + `production` environment approval  |
 
 `ci.yaml` runs on every PR and push to `master`: it builds the manifest against both `sepolia`
-and `mainnet` networks (via the reusable `ci-checks.yaml`) as a compile-only gate — this repo
-has no lint/test suite, so "does `graph codegen` + `graph build` succeed for both networks" is
-the correctness signal. Sepolia is exercised here purely to catch multi-network compile
-regressions; nothing deploys it anywhere.
+and `mainnet` networks (via the reusable `ci-checks.yaml`) as the compile gate for mappings,
+and runs the cutover checker's Node tests separately. Sepolia is exercised here purely to
+catch multi-network compile regressions; nothing deploys it anywhere.
 
 ## Promotion path
 
@@ -149,30 +148,44 @@ non-zero fee rather than `0`.
 
 ### Automated check
 
-`cutover-check.yaml` runs `scripts/check-cutover.mjs` every 6 hours and **fails while the
-latest `v*` tag is not what the proxy serves**, so a forgotten cutover surfaces as a red
-workflow instead of staying invisible. It compares `_meta.deployment` from Studio (for that
-tag) against `_meta.deployment` from the proxy, and needs no credentials.
+`cutover-check.yaml` runs `scripts/check-cutover.mjs` every 6 hours to detect a missed cutover.
+It compares `_meta.deployment` from Studio (for the selected release tag) against
+`_meta.deployment` from the proxy, and needs no credentials.
+
+By default, it selects the highest `v*` tag using Git's descending version order
+(`git tag --list 'v*' --sort=-version:refname`), across all fetched tags regardless of commit
+ancestry or tag dates. For example, `v1.10.0` sorts above `v1.9.0`. Recovery and rollback tags
+must increase the version even when reusing the same commit or an older commit. Set
+`RELEASE_TAG` or the workflow's `release_tag` input to check a specific label instead.
 
 It cannot run as a post-deploy step — a full re-sync outlasts any job — so it polls instead,
-and stays green while the new version is still indexing, reporting progress. It reports:
+and stays green while a healthy new version is still indexing, reporting progress. Indexing
+errors on either endpoint fail the check before comparing hashes or sync progress. It reports:
 
-| State                                                | Result                                        |
-| ---------------------------------------------------- | --------------------------------------------- |
-| Hashes match                                          | pass — the release is live                    |
-| Studio still indexing                                 | pass — cutover not due yet, prints progress   |
-| Studio synced, proxy serves something else            | **fail** — cutover pending                    |
-| Studio version no longer resolves                     | **fail** — archived; re-tag and re-sync       |
-| Either endpoint unreachable                           | **fail**                                      |
+| State                                           | Result                                      |
+| ----------------------------------------------- | ------------------------------------------- |
+| Either endpoint reports indexing errors         | **fail** — unhealthy deployment              |
+| Healthy hashes match                            | pass — the release is live                  |
+| Healthy Studio still indexing                   | pass — cutover not due yet, prints progress |
+| Healthy Studio caught up, proxy hash differs    | **fail** — cutover pending                   |
+| Studio version no longer resolves               | **fail** — check missing or archived version |
+| Either endpoint unreachable or malformed         | **fail**                                    |
+
+Progress is relative to the proxy's indexed block, not an independent chain-head check.
+A pending cutover still requires publishing and validating the deployment-pinned gateway URL
+as described in [Consumer cutover](#consumer-cutover), before updating the Worker secret.
 
 Run it locally the same way, against whatever tag you care about:
 
 ```
-node scripts/check-cutover.mjs                  # latest v* tag
+node scripts/check-cutover.mjs                  # highest version v* tag
 RELEASE_TAG=v1.2.3 node scripts/check-cutover.mjs
 ```
 
 Or trigger it from the Actions tab (`Cutover Check` > Run workflow) with an optional tag.
+
+Run the isolated regression tests with `node --test scripts/check-cutover.test.mjs`. They use
+temporary Git repositories and mocked responses, need no dependencies, and run in `ci.yaml`.
 
 ## Required repo configuration (one-time)
 

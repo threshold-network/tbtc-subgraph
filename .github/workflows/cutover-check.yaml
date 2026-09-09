@@ -1,6 +1,6 @@
 # Fails while the latest release is not what production actually serves.
 #
-# `deploy-mainnet.yaml` finishes at "published to Studio", which is only half a
+# `deploy-mainnet.yaml` finishes at "deployed to Studio", which is only half a
 # release: what `api.threshold.network` serves is decided by a secret on the
 # threshold-api Cloudflare Worker that someone has to repoint by hand. When that
 # was skipped for v0.49.0 nothing failed anywhere — the release just never
@@ -10,7 +10,8 @@
 # It cannot run as a post-deploy step: a graft-less deploy re-syncs ~13M blocks
 # and takes hours to days, far longer than a job can wait. So it runs on a
 # schedule instead and keeps failing until the cutover happens, and passes
-# quietly (reporting sync progress) while the new version is still indexing.
+# quietly (reporting sync progress) while a healthy new version is still indexing.
+# Indexing errors on either endpoint fail before any readiness classification.
 #
 # Read-only and credential-free: it queries two public GraphQL endpoints.
 name: Cutover Check
@@ -23,7 +24,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Version label to check (default: latest v* tag)'
+        description: 'Version label to check (default: highest version v* tag)'
         required: false
         type: string
 
@@ -41,8 +42,8 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          # Tags are needed to resolve the latest v* release when no explicit
-          # tag is given, and networks.json start blocks feed the progress %.
+          # All tags are needed for version ordering, including recovery tags
+          # on older commits. networks.json start blocks feed the progress %.
           fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:

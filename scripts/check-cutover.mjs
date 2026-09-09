@@ -2,7 +2,7 @@
 
 // Answers one question: is the latest release actually what production serves?
 //
-// A `graph deploy` only publishes to Studio. What `api.threshold.network`
+// A `graph deploy` uploads the version to Studio. What `api.threshold.network`
 // serves is decided by the `SUBGRAPH_GATEWAY_URL_MAINNET` secret on the
 // threshold-api Cloudflare Worker, which is repointed by hand. Nothing failed
 // when that step was skipped for v0.49.0 — the release simply never reached
@@ -14,14 +14,15 @@
 //   - the public proxy                          -> what production serves
 //
 // Outcomes:
-//   PASS      hashes match; the release is live
-//   PASS      Studio is still indexing; cutover is not due yet (prints progress)
+//   FAIL      either endpoint reports indexing errors
+//   PASS      healthy hashes match; the release is live
+//   PASS      healthy Studio is still indexing; cutover is not due yet (prints progress)
 //   FAIL      Studio is synced but production serves a different hash -> cutover pending
-//   FAIL      the Studio version no longer resolves -> archived; re-tag and re-sync
+//   FAIL      the Studio version no longer resolves -> check missing/archived version
 //   FAIL      either endpoint is unreachable or malformed
 //
 // Usage:
-//   node scripts/check-cutover.mjs                 # checks the latest v* tag
+//   node scripts/check-cutover.mjs                 # checks the highest version v* tag
 //   RELEASE_TAG=v1.2.3 node scripts/check-cutover.mjs
 
 import { execFileSync } from "node:child_process";
@@ -54,17 +55,24 @@ const META_QUERY = "{ _meta { deployment block { number } hasIndexingErrors } }"
 
 function resolveReleaseTag() {
   if (process.env.RELEASE_TAG) return process.env.RELEASE_TAG;
+  let tags;
   try {
-    return execFileSync("git", ["describe", "--tags", "--abbrev=0", "--match", "v*"], {
-      cwd: repoRoot,
-      encoding: "utf8",
-    }).trim();
+    // Use version order across all tags, independent of HEAD ancestry or tag
+    // dates. Recovery and rollback releases must use a higher version even
+    // when they tag an existing or older commit.
+    tags = execFileSync(
+      "git",
+      ["tag", "--list", "v*", "--sort=-version:refname", "--no-column"],
+      { cwd: repoRoot, encoding: "utf8" },
+    ).trim();
   } catch {
-    throw new Error(
-      "No RELEASE_TAG given and no v* tag found. Pass RELEASE_TAG=vX.Y.Z, or " +
-        "check out with fetch-depth: 0 so tags are available.",
-    );
+    throw new Error("Cannot list release tags. Run from a Git checkout.");
   }
+  if (tags) return tags.split(/\r?\n/)[0];
+  throw new Error(
+    "No RELEASE_TAG given and no v* tag found. Pass RELEASE_TAG=vX.Y.Z, or " +
+      "check out with fetch-depth: 0 so tags are available.",
+  );
 }
 
 // The earliest startBlock is where a graft-less deploy begins indexing, so it
@@ -191,17 +199,34 @@ async function main() {
     report({
       status: "fail",
       headline: archived
-        ? `Studio no longer serves ${releaseTag} — it was never queried and has been archived.`
+        ? `Studio no longer serves ${releaseTag} — the version is missing or archived.`
         : `Cannot read Studio for ${releaseTag}: ${studio.reason}`,
       details: [
         `studio: ${studioUrl}`,
         `production is serving: ${prod.deployment} (block ${prod.block.toLocaleString()})`,
         ...(archived
           ? [
-              "Recover by tagging a new release, letting it fully re-sync, then",
-              "cutting the proxy over. See docs/deployment.md > Consumer cutover.",
+              "Check the version label and Studio status. Before deploying a replacement,",
+              "preserve the live upstream. See docs/deployment.md > Promotion path.",
+              "Use a higher version tag for recovery, then follow Consumer cutover",
+              "to publish, validate the gateway endpoint, and update the proxy.",
             ]
           : []),
+      ],
+    });
+    return 1;
+  }
+
+  // Health must be checked before declaring a release live, progressing, or
+  // ready. An unhealthy proxy is also an unreliable sync-height reference.
+  if (prod.hasIndexingErrors || studio.hasIndexingErrors) {
+    report({
+      status: "fail",
+      headline: `Indexing errors prevent a healthy cutover check for ${releaseTag}.`,
+      details: [
+        `studio ${releaseTag}: ${studio.deployment} at block ${studio.block.toLocaleString()} (indexing errors: ${studio.hasIndexingErrors})`,
+        `production: ${prod.deployment} at block ${prod.block.toLocaleString()} (indexing errors: ${prod.hasIndexingErrors})`,
+        "Investigate indexing errors before relying on the release's sync status.",
       ],
     });
     return 1;
@@ -214,9 +239,6 @@ async function main() {
       details: [
         `deployment: ${prod.deployment}`,
         `block: ${prod.block.toLocaleString()}`,
-        ...(prod.hasIndexingErrors
-          ? ["WARNING: the live deployment reports indexing errors."]
-          : []),
       ],
     });
     return 0;
@@ -238,9 +260,6 @@ async function main() {
         `studio ${releaseTag}: ${studio.deployment} at block ${studio.block.toLocaleString()}`,
         `production:  ${prod.deployment} at block ${prod.block.toLocaleString()}`,
         `${lag.toLocaleString()} blocks behind`,
-        ...(studio.hasIndexingErrors
-          ? ["WARNING: the indexing version reports errors; it may never catch up."]
-          : []),
       ],
     });
     return 0;
@@ -248,15 +267,16 @@ async function main() {
 
   report({
     status: "fail",
-    headline: `Cutover pending: ${releaseTag} is synced but production still serves the previous deployment.`,
+    headline: `Cutover pending: ${releaseTag} has caught up in Studio but production serves a different deployment.`,
     details: [
       `studio ${releaseTag}: ${studio.deployment} at block ${studio.block.toLocaleString()}`,
       `production:  ${prod.deployment} at block ${prod.block.toLocaleString()}`,
       "",
-      "Repoint the consumer, then re-run this check:",
+      "Follow docs/deployment.md > Consumer cutover to publish and validate",
+      "the deployment-pinned gateway URL. After verification, set that URL",
+      "at the prompt from a threshold-api checkout:",
       "  wrangler secret put SUBGRAPH_GATEWAY_URL_MAINNET --env production",
-      "  bun run deploy:production",
-      "See docs/deployment.md > Consumer cutover.",
+      "The secret update takes effect immediately; re-run this check to verify.",
     ],
   });
   return 1;
