@@ -1,0 +1,55 @@
+# Fails while the latest release is not what production actually serves.
+#
+# `deploy-mainnet.yaml` finishes at "published to Studio", which is only half a
+# release: what `api.threshold.network` serves is decided by a secret on the
+# threshold-api Cloudflare Worker that someone has to repoint by hand. When that
+# was skipped for v0.49.0 nothing failed anywhere — the release just never
+# reached production, and the unqueried Studio version was later archived. This
+# workflow is the missing alarm.
+#
+# It cannot run as a post-deploy step: a graft-less deploy re-syncs ~13M blocks
+# and takes hours to days, far longer than a job can wait. So it runs on a
+# schedule instead and keeps failing until the cutover happens, and passes
+# quietly (reporting sync progress) while the new version is still indexing.
+#
+# Read-only and credential-free: it queries two public GraphQL endpoints.
+name: Cutover Check
+
+on:
+  schedule:
+    # Every 6 hours. A sync runs for hours to days, so polling faster only adds
+    # noise; slower risks a release sitting un-cut-over for most of a day.
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Version label to check (default: latest v* tag)'
+        required: false
+        type: string
+
+# Only the newest check matters; a queued backlog would report stale state.
+concurrency:
+  group: cutover-check
+  cancel-in-progress: true
+
+jobs:
+  cutover-check:
+    name: Is the latest release live?
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          # Tags are needed to resolve the latest v* release when no explicit
+          # tag is given, and networks.json start blocks feed the progress %.
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      # No dependencies: the script uses only the Node standard library, so it
+      # skips `yarn install` and cannot be broken by a bad lockfile.
+      - name: Check that production serves the latest release
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: node scripts/check-cutover.mjs

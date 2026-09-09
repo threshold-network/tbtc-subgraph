@@ -128,6 +128,33 @@ For a release that fixes indexed *values* rather than the schema, spot-check a r
 was supposed to correct — e.g. for the `treasuryFee` fix, an old swept deposit should report a
 non-zero fee rather than `0`.
 
+### Automated check
+
+`cutover-check.yaml` runs `scripts/check-cutover.mjs` every 6 hours and **fails while the
+latest `v*` tag is not what the proxy serves**, so a forgotten cutover surfaces as a red
+workflow instead of staying invisible. It compares `_meta.deployment` from Studio (for that
+tag) against `_meta.deployment` from the proxy, and needs no credentials.
+
+It cannot run as a post-deploy step — a full re-sync outlasts any job — so it polls instead,
+and stays green while the new version is still indexing, reporting progress. It reports:
+
+| State                                                | Result                                        |
+| ---------------------------------------------------- | --------------------------------------------- |
+| Hashes match                                          | pass — the release is live                    |
+| Studio still indexing                                 | pass — cutover not due yet, prints progress   |
+| Studio synced, proxy serves something else            | **fail** — cutover pending                    |
+| Studio version no longer resolves                     | **fail** — archived; re-tag and re-sync       |
+| Either endpoint unreachable                           | **fail**                                      |
+
+Run it locally the same way, against whatever tag you care about:
+
+```
+node scripts/check-cutover.mjs                  # latest v* tag
+RELEASE_TAG=v1.2.3 node scripts/check-cutover.mjs
+```
+
+Or trigger it from the Actions tab (`Cutover Check` > Run workflow) with an optional tag.
+
 ## Required repo configuration (one-time)
 
 - **Secrets** (Settings > Secrets and variables > Actions):
