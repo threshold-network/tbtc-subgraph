@@ -1,0 +1,12 @@
+[
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": true, "name": "emitterChainId", "type": "uint16"},
+      {"indexed": true, "name": "emitterAddress", "type": "bytes32"},
+      {"indexed": true, "name": "sequence", "type": "uint64"}
+    ],
+    "name": "TransferRedeemed",
+    "type": "event"
+  }
+]

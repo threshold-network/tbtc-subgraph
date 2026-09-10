@@ -715,3 +715,44 @@ dataSources:
         - event: TBTCBridgedToStarkNet(indexed address,uint256,uint256,uint256)
           handler: handleTBTCBridgedToStarkNet
       file: ./src/mappingBridgeActivity.ts
+  - kind: ethereum
+    name: WormholeTokenBridge
+    network: mainnet
+    source:
+      abi: WormholeTokenBridge
+      address: "0x3ee18B2214AFF97000D974cf647E7C347E8fa585"
+      startBlock: 13042356
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - BridgeActivity
+      abis:
+        - name: WormholeTokenBridge
+          file: ./abis/WormholeTokenBridge.json
+      eventHandlers:
+        - event: TransferRedeemed(indexed uint16,indexed bytes32,indexed uint64)
+          handler: handleWormholeTransferRedeemed
+          receipt: true
+      file: ./src/mappingBridgeReturns.ts
+  - kind: ethereum
+    name: StarkGateBridge
+    network: mainnet
+    source:
+      abi: StarkGateBridge
+      address: "0x2111A49ebb717959059693a3698872a0aE9866b9"
+      startBlock: 13042356
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - BridgeActivity
+      abis:
+        - name: StarkGateBridge
+          file: ./abis/StarkGateBridge.json
+      eventHandlers:
+        - event: Withdrawal(indexed address,indexed address,uint256)
+          handler: handleStarkGateWithdrawal
+      file: ./src/mappingBridgeReturns.ts

@@ -3,7 +3,9 @@
 `BridgeActivity` records Ethereum hub events, one row per transaction hash and
 log index. It covers Arbitrum, Base, Solana, Sui, and Starknet direct mint
 lifecycle events, the depositor transfer events, and inbound Bitcoin redemptions
-through `L1BTCRedeemerWormhole`. Sei is intentionally excluded.
+through `L1BTCRedeemerWormhole`. It also records completed standalone tBTC
+returns to Ethereum through Wormhole and StarkGate as `TRANSFER_RECEIVED`.
+Sei is intentionally excluded.
 
 Arbitrum and Base include both legacy address-owner lifecycle events and current
 bytes32-owner events from their configured start blocks. Legacy recipients are
@@ -13,8 +15,41 @@ implementations without transfer events still produce lifecycle activity rows.
 These are event records, not a unique-transfer count or destination-chain
 completion feed. A deposit finalization and its transfer can produce separate
 rows in the same transaction. A sent/finalized event does not establish delivery
-on the destination chain. Generic Wormhole Token Bridge transfers that do not
-use these hub contracts are outside this feed.
+on the destination chain. `TRANSFER_RECEIVED` proves receipt on Ethereum.
+Generic outbound transfers and in-flight returns are outside this feed.
+
+## Completed returns to Ethereum
+
+- Wormhole: the Ethereum Token Bridge's authenticated `TransferRedeemed`
+  identifies the source-chain emitter and sequence. Match native tBTC `Transfer`
+  logs from that bridge after the completion and before its next completion,
+  including non-tBTC completions as boundaries. The optional arbiter payment
+  precedes the recipient payment; index one row using the last payout and its
+  **net received** amount. Do not count a relayer fee as another arrival.
+- StarkGate: subscribe to `Withdrawal(address,address,uint256)` on the configured
+  Ethereum bridge and require the token to be tBTC. This event is emitted after
+  consuming the proven L2 message and transferring the tokens. Reclaimed deposits
+  emit a different event and are not returns from Starknet.
+- Transfers to the configured Bitcoin redeemer are excluded from arrival rows.
+  Their existing redemption event and source-chain enrichment remain intact.
+  Exclusion is per payout, so an ordinary return in the same batch stays visible.
+- Amounts are native Ethereum tBTC units (18 decimals). `recipient` is the actual
+  Ethereum recipient. Leave `sender` unset: the Ethereum submitter can be a
+  relayer and does not establish the source-chain wallet. Source wallet searches
+  and pending arrivals would require additional source-chain data.
+- Missing receipts/payouts, non-tBTC tokens, malformed or ambiguous payouts, and
+  unconfigured bridge contracts do not create arrivals. Unknown Wormhole chain
+  IDs retain `Unknown` plus their numeric ID; Sei (32) is excluded explicitly.
+
+`networks.json` pins Ethereum/Sepolia bridge deployments. Start blocks are the
+tBTC deployment blocks to include all possible returns, even before the direct
+mint hub contracts existed. Mainnet/Sepolia StarkGate addresses were checked via
+the corresponding tBTC depositor's `starkGateBridge()` getter.
+
+Sources: [Wormhole completion implementation](https://github.com/wormhole-foundation/wormhole/blob/main/ethereum/contracts/bridge/Bridge.sol),
+[Wormhole deployments](https://wormhole.com/docs/products/reference/contract-addresses/),
+[StarkGate withdrawal implementation](https://github.com/starknet-io/starkgate-contracts/blob/v2.0.1/src/solidity/StarknetTokenBridge.sol).
+The mapping tests include a captured [Arbitrum return](https://etherscan.io/tx/0xcfe55ff31b9481f1cb3992b8cfb58bff9dd0e66504179b97c1d36b50e61bccff).
 
 ## Amounts, addresses, and ordering
 

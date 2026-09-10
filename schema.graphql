@@ -250,6 +250,7 @@ enum BridgeActivityType {
     TOKENS_TRANSFERRED_WITH_PAYLOAD
     TBTC_BRIDGED_TO_STARKNET
     REDEMPTION_REQUESTED
+    TRANSFER_RECEIVED
 }
 
 enum BridgeActivityDirection {
