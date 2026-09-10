@@ -620,6 +620,23 @@ test("an Infinity REQUEST_TIMEOUT_MS fails loudly instead of accepting it", (t) 
   assert.deepEqual(result.requests, []);
 });
 
+test("an empty-string SYNC_LAG_TOLERANCE_BLOCKS falls back to the real default, not 0", (t) => {
+  // Number("") is 0, not NaN, so a naive check only for `undefined` would silently treat an
+  // empty-but-set override as "0", not "unset". Proven observably, not just by absence of a
+  // thrown error: a 50-block lag is well within the real default (300) but would exceed a
+  // broken fallback of 0, flipping this from "cutover pending" (mismatched, caught-up hashes)
+  // to "still indexing" (mismatched hashes hidden behind the too-small tolerance).
+  const result = fixture(t).run({
+    releaseTag: "v1.0.0",
+    production: { deployment: "QmProduction", block: { number: 10000 } },
+    studio: { deployment: "QmStudioPending", block: { number: 9950 } },
+    envOverrides: { SYNC_LAG_TOLERANCE_BLOCKS: "" },
+  });
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /Cutover pending/);
+  assert.doesNotMatch(result.stdout, /is still indexing/);
+});
+
 test("release selection filters out pre-release-shaped tags", (t) => {
   const repo = fixture(t);
   repo.git("tag", "v1.4.0");
