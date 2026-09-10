@@ -33,8 +33,8 @@
       "startBlock": 5340873
     },
     "L1BTCRedeemerWormhole": {
-      "address": "0x0000000000000000000000000000000000000000",
-      "startBlock": 0
+      "address": "0xe8312BD306512c5CAD4D650df373D5597B1C697A",
+      "startBlock": 8558171
     },
     "GaslessDepositor": {
       "address": "0x1AB655E0dCBf19fB706c0ca3dDcda6F5653E2d12",
@@ -55,6 +55,34 @@
     "StarkNetDepositor": {
       "address": "0x40c74a5f0b0e6CC3Ae4E8dD2Db46d372504445DA",
       "startBlock": 8509896
+    },
+    "ArbitrumL1BitcoinDepositor": {
+      "address": "0xD9B523fb879C63b00ef14e48C98f4e3398d3BA2D",
+      "startBlock": 6281003
+    },
+    "BaseL1BitcoinDepositor": {
+      "address": "0x59FAE614867b66421b44D1Ed3461e6B6a4B50106",
+      "startBlock": 7592526
+    },
+    "SolanaL1BitcoinDepositor": {
+      "address": "0x02339D3c0fD0881aa59EF61E3ef6B8f8103edA1d",
+      "startBlock": 8088729
+    },
+    "SuiBTCDepositorWormhole": {
+      "address": "0x25b614064293A6B9012E82Bb31BC2B1Be34e36Cb",
+      "startBlock": 8680336
+    },
+    "StarkNetBitcoinDepositor": {
+      "address": "0x40c74a5f0b0e6CC3Ae4E8dD2Db46d372504445DA",
+      "startBlock": 8509896
+    },
+    "WormholeTokenBridge": {
+      "address": "0xDB5492265f6038831E89f495670FF909aDe94bd9",
+      "startBlock": 4553001
+    },
+    "StarkGateBridge": {
+      "address": "0xF6217de888fD6E6b2CbFBB2370973BE4c36a152D",
+      "startBlock": 4553001
     }
   },
   "mainnet": {
@@ -92,7 +120,7 @@
     },
     "L1BTCRedeemerWormhole": {
       "address": "0x5D4d83aaB53B7E7cA915AEB2d4d3f4e03823DbDe",
-      "startBlock": 18500000
+      "startBlock": 23309400
     },
     "GaslessDepositor": {
       "address": "0xad7c6d46F4a4bc2D3A227067d03218d6D7c9aaa5",
@@ -113,6 +141,34 @@
     "StarkNetDepositor": {
       "address": "0xC9031f76006da0BD4bFa9E02aDf0d448dB3BC155",
       "startBlock": 22671770
+    },
+    "ArbitrumL1BitcoinDepositor": {
+      "address": "0x75A6e4A7C8fAa162192FAD6C1F7A6d48992c619A",
+      "startBlock": 20632547
+    },
+    "BaseL1BitcoinDepositor": {
+      "address": "0x186D048097c7406C64EfB0537886E3CaE100a1fe",
+      "startBlock": 21961116
+    },
+    "SolanaL1BitcoinDepositor": {
+      "address": "0x35D6701640fca561BaCfE4151063C8e55aF66dB7",
+      "startBlock": 22385228
+    },
+    "SuiBTCDepositorWormhole": {
+      "address": "0xb810AbD43d8FCFD812d6FEB14fefc236E92a341A",
+      "startBlock": 22842726
+    },
+    "StarkNetBitcoinDepositor": {
+      "address": "0xC9031f76006da0BD4bFa9E02aDf0d448dB3BC155",
+      "startBlock": 22671770
+    },
+    "WormholeTokenBridge": {
+      "address": "0x3ee18B2214AFF97000D974cf647E7C347E8fa585",
+      "startBlock": 13042356
+    },
+    "StarkGateBridge": {
+      "address": "0x2111A49ebb717959059693a3698872a0aE9866b9",
+      "startBlock": 13042356
     }
   }
 }

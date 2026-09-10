@@ -407,28 +407,27 @@ dataSources:
     source:
       abi: L1BTCRedeemerWormhole
       address: "0x5D4d83aaB53B7E7cA915AEB2d4d3f4e03823DbDe"
-      startBlock: 18500000
+      startBlock: 23309400
     mapping:
       kind: ethereum/events
-      apiVersion: 0.0.6
+      apiVersion: 0.0.7
       language: wasm/assemblyscript
       entities:
         - Redemption
         - WormholeSender
-        - CrossChainRedemptionTracker
+        - BridgeActivity
       abis:
         - name: L1BTCRedeemerWormhole
           file: ./abis/L1BTCRedeemerWormhole.json
         - name: Bridge
           file: ./abis/Bridge.json
       eventHandlers:
-        - event: RedemptionRequested(indexed bytes32,indexed bytes20,(bytes32,uint32,uint64),bytes,uint64)
+        - event: RedemptionRequested(indexed uint256,indexed
+            bytes20,(bytes32,uint32,uint64),indexed bytes,uint256)
           handler: handleWormholeRedemptionRequested
+          receipt: true
         - event: AllowedSenderUpdated(indexed bytes32,bool)
           handler: handleAllowedSenderUpdated
-      callHandlers:
-        - function: requestRedemption(bytes)
-          handler: handleRequestRedemptionCall
       file: ./src/mappingL1BTCRedeemer.ts
   # ---------------------------------------------------------------------------
   # Routed-deposit L1 depositors. All inherit AbstractL1BTCDepositor and emit
@@ -581,3 +580,179 @@ dataSources:
             address,uint256,uint256)
           handler: handleLegacyRoutedDepositFinalized
       file: ./src/mappingRoutedDeposit.ts
+  - kind: ethereum
+    name: ArbitrumL1BitcoinDepositor
+    network: mainnet
+    source:
+      abi: EvmWormholeL1BitcoinDepositor
+      address: "0x75A6e4A7C8fAa162192FAD6C1F7A6d48992c619A"
+      startBlock: 20632547
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - BridgeActivity
+      abis:
+        - name: EvmWormholeL1BitcoinDepositor
+          file: ./abis/EvmWormholeL1BitcoinDepositor.json
+      eventHandlers:
+        - event: DepositInitialized(indexed uint256,indexed bytes32,indexed address)
+          handler: handleArbitrumDepositInitialized
+        - event: DepositFinalized(indexed uint256,indexed bytes32,indexed
+            address,uint256,uint256)
+          handler: handleArbitrumDepositFinalized
+        - event: DepositInitialized(indexed uint256,indexed address,indexed address)
+          handler: handleLegacyArbitrumDepositInitialized
+        - event: DepositFinalized(indexed uint256,indexed address,indexed
+            address,uint256,uint256)
+          handler: handleLegacyArbitrumDepositFinalized
+        - event: TokensTransferredWithPayload(uint256,address,uint64)
+          handler: handleArbitrumTokensTransferredWithPayload
+      file: ./src/mappingBridgeActivity.ts
+  - kind: ethereum
+    name: BaseL1BitcoinDepositor
+    network: mainnet
+    source:
+      abi: EvmWormholeL1BitcoinDepositor
+      address: "0x186D048097c7406C64EfB0537886E3CaE100a1fe"
+      startBlock: 21961116
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - BridgeActivity
+      abis:
+        - name: EvmWormholeL1BitcoinDepositor
+          file: ./abis/EvmWormholeL1BitcoinDepositor.json
+      eventHandlers:
+        - event: DepositInitialized(indexed uint256,indexed bytes32,indexed address)
+          handler: handleBaseDepositInitialized
+        - event: DepositFinalized(indexed uint256,indexed bytes32,indexed
+            address,uint256,uint256)
+          handler: handleBaseDepositFinalized
+        - event: DepositInitialized(indexed uint256,indexed address,indexed address)
+          handler: handleLegacyBaseDepositInitialized
+        - event: DepositFinalized(indexed uint256,indexed address,indexed
+            address,uint256,uint256)
+          handler: handleLegacyBaseDepositFinalized
+        - event: TokensTransferredWithPayload(uint256,address,uint64)
+          handler: handleBaseTokensTransferredWithPayload
+      file: ./src/mappingBridgeActivity.ts
+  - kind: ethereum
+    name: SolanaL1BitcoinDepositor
+    network: mainnet
+    source:
+      abi: NonEvmWormholeL1BitcoinDepositor
+      address: "0x35D6701640fca561BaCfE4151063C8e55aF66dB7"
+      startBlock: 22385228
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - BridgeActivity
+      abis:
+        - name: NonEvmWormholeL1BitcoinDepositor
+          file: ./abis/NonEvmWormholeL1BitcoinDepositor.json
+      eventHandlers:
+        - event: DepositInitialized(indexed uint256,indexed bytes32,indexed address)
+          handler: handleSolanaDepositInitialized
+        - event: DepositFinalized(indexed uint256,indexed bytes32,indexed
+            address,uint256,uint256)
+          handler: handleSolanaDepositFinalized
+        - event: TokensTransferredWithPayload(uint256,bytes32,uint64)
+          handler: handleSolanaTokensTransferredWithPayload
+      file: ./src/mappingBridgeActivity.ts
+  - kind: ethereum
+    name: SuiBTCDepositorWormhole
+    network: mainnet
+    source:
+      abi: NonEvmWormholeL1BitcoinDepositor
+      address: "0xb810AbD43d8FCFD812d6FEB14fefc236E92a341A"
+      startBlock: 22842726
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - BridgeActivity
+      abis:
+        - name: NonEvmWormholeL1BitcoinDepositor
+          file: ./abis/NonEvmWormholeL1BitcoinDepositor.json
+      eventHandlers:
+        - event: DepositInitialized(indexed uint256,indexed bytes32,indexed address)
+          handler: handleSuiDepositInitialized
+        - event: DepositFinalized(indexed uint256,indexed bytes32,indexed
+            address,uint256,uint256)
+          handler: handleSuiDepositFinalized
+        - event: TokensTransferredWithPayload(uint256,bytes32,uint64)
+          handler: handleSuiTokensTransferredWithPayload
+      file: ./src/mappingBridgeActivity.ts
+  - kind: ethereum
+    name: StarkNetBitcoinDepositor
+    network: mainnet
+    source:
+      abi: StarkNetBitcoinDepositor
+      address: "0xC9031f76006da0BD4bFa9E02aDf0d448dB3BC155"
+      startBlock: 22671770
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - BridgeActivity
+      abis:
+        - name: StarkNetBitcoinDepositor
+          file: ./abis/StarkNetBitcoinDepositor.json
+      eventHandlers:
+        - event: DepositInitialized(indexed uint256,indexed bytes32,indexed address)
+          handler: handleStarkNetDepositInitialized
+        - event: DepositFinalized(indexed uint256,indexed bytes32,indexed
+            address,uint256,uint256)
+          handler: handleStarkNetDepositFinalized
+        - event: TBTCBridgedToStarkNet(indexed address,uint256,uint256,uint256)
+          handler: handleTBTCBridgedToStarkNet
+      file: ./src/mappingBridgeActivity.ts
+  - kind: ethereum
+    name: WormholeTokenBridge
+    network: mainnet
+    source:
+      abi: WormholeTokenBridge
+      address: "0x3ee18B2214AFF97000D974cf647E7C347E8fa585"
+      startBlock: 13042356
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - BridgeActivity
+      abis:
+        - name: WormholeTokenBridge
+          file: ./abis/WormholeTokenBridge.json
+      eventHandlers:
+        - event: TransferRedeemed(indexed uint16,indexed bytes32,indexed uint64)
+          handler: handleWormholeTransferRedeemed
+          receipt: true
+      file: ./src/mappingBridgeReturns.ts
+  - kind: ethereum
+    name: StarkGateBridge
+    network: mainnet
+    source:
+      abi: StarkGateBridge
+      address: "0x2111A49ebb717959059693a3698872a0aE9866b9"
+      startBlock: 13042356
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - BridgeActivity
+      abis:
+        - name: StarkGateBridge
+          file: ./abis/StarkGateBridge.json
+      eventHandlers:
+        - event: Withdrawal(indexed address,indexed address,uint256)
+          handler: handleStarkGateWithdrawal
+      file: ./src/mappingBridgeReturns.ts
