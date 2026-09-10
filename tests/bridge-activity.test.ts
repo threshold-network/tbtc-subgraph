@@ -1,9 +1,27 @@
 import {Address, BigInt, Bytes, ethereum, json} from "@graphprotocol/graph-ts"
 import {assert, beforeEach, clearStore, createMockedFunction, newMockEvent, readFile, test} from "matchstick-as/assembly/index"
-import {DepositInitialized, DepositFinalized, TokensTransferredWithPayload} from "../generated/BaseL1BitcoinDepositor/EvmWormholeL1BitcoinDepositor"
+import {
+    DepositInitialized,
+    DepositFinalized,
+    DepositInitialized1 as LegacyBaseDepositInitialized,
+    DepositFinalized1 as LegacyBaseDepositFinalized,
+    TokensTransferredWithPayload
+} from "../generated/BaseL1BitcoinDepositor/EvmWormholeL1BitcoinDepositor"
+import {
+    DepositInitialized1 as LegacyArbitrumDepositInitialized,
+    DepositFinalized1 as LegacyArbitrumDepositFinalized
+} from "../generated/ArbitrumL1BitcoinDepositor/EvmWormholeL1BitcoinDepositor"
 import {RedemptionRequested} from "../generated/L1BTCRedeemerWormhole/L1BTCRedeemerWormhole"
 import {BridgeActivity, Redemption} from "../generated/schema"
-import {handleBaseDepositInitialized, handleBaseDepositFinalized, handleBaseTokensTransferredWithPayload} from "../src/mappingBridgeActivity"
+import {
+    handleBaseDepositInitialized,
+    handleBaseDepositFinalized,
+    handleBaseTokensTransferredWithPayload,
+    handleLegacyArbitrumDepositInitialized,
+    handleLegacyArbitrumDepositFinalized,
+    handleLegacyBaseDepositInitialized,
+    handleLegacyBaseDepositFinalized
+} from "../src/mappingBridgeActivity"
 import {handleWormholeRedemptionRequested} from "../src/mappingL1BTCRedeemer"
 import {RedemptionOrigin, eventTopic, originFromReceipt, wormholeChainName} from "../src/utils/bridge-origin"
 import {calculateRedemptionKeyByBigInt, getIDFromEvent} from "../src/utils/utils"
@@ -12,6 +30,11 @@ import {getOrCreateRedemption} from "../src/utils/helper"
 const TOKEN_BRIDGE = Address.fromString("0x3ee18b2214aff97000d974cf647e7c347e8fa585")
 const EMITTER = Bytes.fromHexString("0x0000000000000000000000008d2de8d2f73f1f4cab472ac9a881c9b123c79627")
 const SCRIPT_HASH = Bytes.fromHexString("0x" + "12".repeat(32))
+const LEGACY_OWNER = Address.fromString("0x1234567890abcdef1234567890abcdef12345678")
+const PADDED_LEGACY_OWNER = "0x0000000000000000000000001234567890abcdef1234567890abcdef12345678"
+const LEGACY_SENDER = Address.fromString("0x000000000000000000000000000000000000beef")
+const ARBITRUM_DEPOSITOR = Address.fromString("0x75a6e4a7c8faa162192fad6c1f7a6d48992c619a")
+const BASE_DEPOSITOR = Address.fromString("0x186d048097c7406c64efb0537886e3cae100a1fe")
 
 function baseEvent(): ethereum.Event {
     let event = newMockEvent()
@@ -23,6 +46,41 @@ function baseEvent(): ethereum.Event {
         new ethereum.EventParam("l1Sender", ethereum.Value.fromAddress(event.address))
     ]
     return event
+}
+
+function legacyDepositEvent(source: Address, finalized: boolean = false): ethereum.Event {
+    let event = baseEvent()
+    event.address = source
+    event.parameters[1] = new ethereum.EventParam("destinationChainDepositOwner", ethereum.Value.fromAddress(LEGACY_OWNER))
+    event.parameters[2] = new ethereum.EventParam("l1Sender", ethereum.Value.fromAddress(LEGACY_SENDER))
+    if (finalized) {
+        event.parameters.push(new ethereum.EventParam("initialAmount", ethereum.Value.fromUnsignedBigInt(BigInt.fromString("2000000000000000000"))))
+        event.parameters.push(new ethereum.EventParam("tbtcAmount", ethereum.Value.fromUnsignedBigInt(BigInt.fromString("1990000000000000000"))))
+    }
+    return event
+}
+
+function assertLegacyDepositActivity(event: ethereum.Event, chain: string, finalized: boolean = false): void {
+    let id = getIDFromEvent(event)
+    assert.entityCount("BridgeActivity", 1)
+    assert.fieldEquals("BridgeActivity", id, "type", finalized ? "DEPOSIT_FINALIZED" : "DEPOSIT_INITIALIZED")
+    assert.fieldEquals("BridgeActivity", id, "direction", finalized ? "OUT" : "IN")
+    assert.fieldEquals("BridgeActivity", id, "protocol", "Wormhole")
+    assert.fieldEquals("BridgeActivity", id, "sourceChain", finalized ? "Ethereum" : "Bitcoin")
+    assert.fieldEquals("BridgeActivity", id, "destinationChain", chain)
+    assert.fieldEquals("BridgeActivity", id, "sourceContract", event.address.toHexString())
+    assert.fieldEquals("BridgeActivity", id, "depositKey", "123")
+    assert.fieldEquals("BridgeActivity", id, "recipientBytes32", PADDED_LEGACY_OWNER)
+    assert.fieldEquals("BridgeActivity", id, "sender", LEGACY_SENDER.toHexString())
+    if (finalized) {
+        assert.fieldEquals("BridgeActivity", id, "initialAmount", "2000000000000000000")
+        assert.fieldEquals("BridgeActivity", id, "tbtcAmount", "1990000000000000000")
+        assert.fieldEquals("BridgeActivity", id, "amount", "1990000000000000000")
+    } else {
+        assert.assertTrue(changetype<BridgeActivity>(BridgeActivity.load(id)).amount === null)
+    }
+    // Older implementations emit no transfer event or sequence.
+    assert.assertTrue(changetype<BridgeActivity>(BridgeActivity.load(id)).sequence === null)
 }
 
 function receiptLog(event: ethereum.Event, index: i32, address: Address, topics: Bytes[]): ethereum.Log {
@@ -72,6 +130,30 @@ test("initialization has no invented amount and preserves bytes32 recipient", ()
     assert.fieldEquals("BridgeActivity", id, "recipientBytes32", EMITTER.toHexString())
     assert.assertTrue(changetype<BridgeActivity>(BridgeActivity.load(id)).amount === null)
     assert.fieldEquals("BridgeActivity", id, "sortKey", event.block.number.leftShift(32).plus(event.logIndex).toString())
+})
+
+test("legacy Arbitrum initialization pads the address owner without a transfer event", (): void => {
+    let event = changetype<LegacyArbitrumDepositInitialized>(legacyDepositEvent(ARBITRUM_DEPOSITOR))
+    handleLegacyArbitrumDepositInitialized(event)
+    assertLegacyDepositActivity(event, "Arbitrum")
+})
+
+test("legacy Arbitrum finalization records amounts without an initialization or transfer event", (): void => {
+    let event = changetype<LegacyArbitrumDepositFinalized>(legacyDepositEvent(ARBITRUM_DEPOSITOR, true))
+    handleLegacyArbitrumDepositFinalized(event)
+    assertLegacyDepositActivity(event, "Arbitrum", true)
+})
+
+test("legacy Base initialization pads the address owner without a transfer event", (): void => {
+    let event = changetype<LegacyBaseDepositInitialized>(legacyDepositEvent(BASE_DEPOSITOR))
+    handleLegacyBaseDepositInitialized(event)
+    assertLegacyDepositActivity(event, "Base")
+})
+
+test("legacy Base finalization records amounts without an initialization or transfer event", (): void => {
+    let event = changetype<LegacyBaseDepositFinalized>(legacyDepositEvent(BASE_DEPOSITOR, true))
+    handleLegacyBaseDepositFinalized(event)
+    assertLegacyDepositActivity(event, "Base", true)
 })
 
 test("finalization and transfer in one transaction remain distinct and use 18 decimal amounts", (): void => {

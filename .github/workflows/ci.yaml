@@ -25,6 +25,7 @@ jobs:
           cache: yarn
       - run: yarn install --frozen-lockfile
       - run: yarn codegen
+      - run: yarn test:manifests
       - run: yarn test:mappings
   cutover-tests:
     name: Cutover checker tests

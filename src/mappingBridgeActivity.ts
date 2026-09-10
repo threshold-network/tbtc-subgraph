@@ -3,11 +3,15 @@ import {BigInt, Bytes, ethereum} from "@graphprotocol/graph-ts"
 import {
     DepositFinalized as ArbitrumDepositFinalized,
     DepositInitialized as ArbitrumDepositInitialized,
+    DepositFinalized1 as LegacyArbitrumDepositFinalized,
+    DepositInitialized1 as LegacyArbitrumDepositInitialized,
     TokensTransferredWithPayload as ArbitrumTokensTransferredWithPayload
 } from "../generated/ArbitrumL1BitcoinDepositor/EvmWormholeL1BitcoinDepositor"
 import {
     DepositFinalized as BaseDepositFinalized,
     DepositInitialized as BaseDepositInitialized,
+    DepositFinalized1 as LegacyBaseDepositFinalized,
+    DepositInitialized1 as LegacyBaseDepositInitialized,
     TokensTransferredWithPayload as BaseTokensTransferredWithPayload
 } from "../generated/BaseL1BitcoinDepositor/EvmWormholeL1BitcoinDepositor"
 import {
@@ -29,6 +33,12 @@ import {RedemptionRequested} from "../generated/L1BTCRedeemerWormhole/L1BTCRedee
 import {BridgeActivity} from "../generated/schema"
 import {resolveRedemptionOrigin} from "./utils/bridge-origin"
 import {getIDFromEvent} from "./utils/utils"
+
+// Match routed-deposit normalization: legacy EVM owners occupy the final
+// 20 bytes of the 32-byte destination field used by current lifecycle events.
+function leftPadAddressTo32Bytes(address: Bytes): Bytes {
+    return new Bytes(12).concat(address)
+}
 
 function createBridgeActivity(
     event: ethereum.Event,
@@ -169,6 +179,30 @@ export function handleArbitrumDepositFinalized(event: ArbitrumDepositFinalized):
     )
 }
 
+export function handleLegacyArbitrumDepositInitialized(event: LegacyArbitrumDepositInitialized): void {
+    saveDepositInitialized(
+        event,
+        "Wormhole",
+        "Arbitrum",
+        event.params.depositKey,
+        leftPadAddressTo32Bytes(event.params.destinationChainDepositOwner),
+        event.params.l1Sender
+    )
+}
+
+export function handleLegacyArbitrumDepositFinalized(event: LegacyArbitrumDepositFinalized): void {
+    saveDepositFinalized(
+        event,
+        "Wormhole",
+        "Arbitrum",
+        event.params.depositKey,
+        leftPadAddressTo32Bytes(event.params.destinationChainDepositOwner),
+        event.params.l1Sender,
+        event.params.initialAmount,
+        event.params.tbtcAmount
+    )
+}
+
 export function handleArbitrumTokensTransferredWithPayload(
     event: ArbitrumTokensTransferredWithPayload
 ): void {
@@ -199,6 +233,30 @@ export function handleBaseDepositFinalized(event: BaseDepositFinalized): void {
         "Base",
         event.params.depositKey,
         event.params.destinationChainDepositOwner,
+        event.params.l1Sender,
+        event.params.initialAmount,
+        event.params.tbtcAmount
+    )
+}
+
+export function handleLegacyBaseDepositInitialized(event: LegacyBaseDepositInitialized): void {
+    saveDepositInitialized(
+        event,
+        "Wormhole",
+        "Base",
+        event.params.depositKey,
+        leftPadAddressTo32Bytes(event.params.destinationChainDepositOwner),
+        event.params.l1Sender
+    )
+}
+
+export function handleLegacyBaseDepositFinalized(event: LegacyBaseDepositFinalized): void {
+    saveDepositFinalized(
+        event,
+        "Wormhole",
+        "Base",
+        event.params.depositKey,
+        leftPadAddressTo32Bytes(event.params.destinationChainDepositOwner),
         event.params.l1Sender,
         event.params.initialAmount,
         event.params.tbtcAmount

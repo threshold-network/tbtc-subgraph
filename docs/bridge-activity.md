@@ -5,6 +5,11 @@ log index. It covers Arbitrum, Base, Solana, Sui, and Starknet direct mint
 lifecycle events, the depositor transfer events, and inbound Bitcoin redemptions
 through `L1BTCRedeemerWormhole`. Sei is intentionally excluded.
 
+Arbitrum and Base include both legacy address-owner lifecycle events and current
+bytes32-owner events from their configured start blocks. Legacy recipients are
+left-padded to 32 bytes, matching routed-deposit normalization. Historical
+implementations without transfer events still produce lifecycle activity rows.
+
 These are event records, not a unique-transfer count or destination-chain
 completion feed. A deposit finalization and its transfer can produce separate
 rows in the same transaction. A sent/finalized event does not establish delivery
@@ -73,6 +78,7 @@ query BridgeActivitySmoke {
 ```sh
 yarn install --frozen-lockfile
 yarn codegen
+yarn test:manifests
 yarn test:mappings
 yarn build-sepolia
 yarn build-mainnet
