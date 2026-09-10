@@ -26,7 +26,7 @@
 //   RELEASE_TAG=v1.2.3 node scripts/check-cutover.mjs
 
 import { execFileSync } from "node:child_process";
-import { appendFileSync, promises as fs } from "node:fs";
+import { appendFileSync, promises as fs, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -50,11 +50,58 @@ const SYNC_LAG_TOLERANCE_BLOCKS = Number(
   process.env.SYNC_LAG_TOLERANCE_BLOCKS ?? "300",
 );
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS ?? "20000");
+const TAG_APPROVAL_GRACE_SECONDS = Number(process.env.TAG_APPROVAL_GRACE_SECONDS ?? "7200"); // 2 hours
+const STILL_INDEXING_CEILING_SECONDS = Number(process.env.STILL_INDEXING_CEILING_SECONDS ?? "604800"); // 7 days
 
 const META_QUERY = "{ _meta { deployment block { number } hasIndexingErrors } }";
 
+// Helper to get tag creation timestamp (Unix epoch seconds).
+// Returns null if the git call fails (unresolvable tag, e.g. RELEASE_TAG/RELEASE_POINTER
+// naming a tag not fetched locally) so callers can skip age-based logic entirely rather
+// than misreading an unknown age as an infinitely old one.
+function getTagCreatedAt(tag) {
+  try {
+    const output = execFileSync(
+      "git",
+      ["for-each-ref", "--format=%(creatordate:unix)", `refs/tags/${tag}`],
+      { cwd: repoRoot, encoding: "utf8" },
+    );
+    const parsed = parseInt(output.trim(), 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function resolveReleaseTag() {
-  if (process.env.RELEASE_TAG) return process.env.RELEASE_TAG;
+  // (1) RELEASE_TAG env var if set (explicit override always wins)
+  if (process.env.RELEASE_TAG) {
+    const tag = process.env.RELEASE_TAG;
+    if (!/^v\d+\.\d+\.\d+$/.test(tag)) {
+      throw new Error(`RELEASE_TAG must match vX.Y.Z, got: ${tag}`);
+    }
+    return tag;
+  }
+
+  // (2) RELEASE_POINTER file content if the file exists and its trimmed content is non-empty.
+  // Read and validate are separate try/catch blocks: a missing/unreadable file falls through
+  // to git-tag-order below, but a malformed *value* in an existing file must fail loudly
+  // rather than be silently ignored (defeats the purpose of an operator-set override).
+  const pointerPath = path.join(repoRoot, "RELEASE_POINTER");
+  let pointerContent;
+  try {
+    pointerContent = readFileSync(pointerPath, "utf8").trim();
+  } catch {
+    pointerContent = "";
+  }
+  if (pointerContent) {
+    if (!/^v\d+\.\d+\.\d+$/.test(pointerContent)) {
+      throw new Error(`RELEASE_POINTER must match vX.Y.Z, got: ${pointerContent}`);
+    }
+    return pointerContent;
+  }
+
+  // (3) fall back to git tag-order (with semver filter) only if RELEASE_POINTER is absent or empty
   let tags;
   try {
     // Use version order across all tags, independent of HEAD ancestry or tag
@@ -68,7 +115,14 @@ function resolveReleaseTag() {
   } catch {
     throw new Error("Cannot list release tags. Run from a Git checkout.");
   }
-  if (tags) return tags.split(/\r?\n/)[0];
+
+  if (tags) {
+    const releaseTags = tags.split(/\r?\n/).find((t) => /^v\d+\.\d+\.\d+$/.test(t));
+    if (releaseTags) {
+      return releaseTags;
+    }
+  }
+
   throw new Error(
     "No RELEASE_TAG given and no v* tag found. Pass RELEASE_TAG=vX.Y.Z, or " +
       "check out with fetch-depth: 0 so tags are available.",
@@ -116,9 +170,11 @@ async function queryMeta(url, label) {
   try {
     payload = JSON.parse(bodyText);
   } catch {
+    // Collapse whitespace and strip backticks from the excerpt
+    const excerpt = bodyText.replace(/\s+/g, " ").replace(/`/g, "'").slice(0, 200);
     return {
       ok: false,
-      reason: `${label} returned non-JSON (HTTP ${response.status}): ${bodyText.slice(0, 200)}`,
+      reason: `${label} returned non-JSON (HTTP ${response.status}): ${excerpt}`,
     };
   }
 
@@ -132,9 +188,11 @@ async function queryMeta(url, label) {
 
   const meta = payload.data?._meta;
   if (!meta?.deployment || typeof meta.block?.number !== "number") {
+    // Collapse whitespace and strip backticks from the excerpt
+    const excerpt = bodyText.replace(/\s+/g, " ").replace(/`/g, "'").slice(0, 200);
     return {
       ok: false,
-      reason: `${label} returned no usable _meta: ${bodyText.slice(0, 200)}`,
+      reason: `${label} returned no usable _meta: ${excerpt}`,
     };
   }
 
@@ -186,32 +244,69 @@ async function main() {
   ]);
 
   if (!prod.ok) {
+    // Move raw-body excerpt into details, keep headline short
+    const excerpt = prod.reason.replace(/\s+/g, " ").replace(/`/g, "'").slice(0, 200);
     report({
       status: "fail",
-      headline: `Cannot read what production serves: ${prod.reason}`,
-      details: [`proxy: ${PROXY_URL}`],
+      headline: `Cannot read what production serves`,
+      details: [
+        `proxy: ${PROXY_URL}`,
+        excerpt,
+      ],
     });
     return 1;
   }
 
   if (!studio.ok) {
     const archived = studio.missing === true;
+    // Handle non-archived case: check grace period for young tags
+    if (!archived) {
+      const tagCreatedAt = getTagCreatedAt(releaseTag);
+      const tagAgeSeconds =
+        tagCreatedAt !== null ? Math.floor(Date.now() / 1000) - tagCreatedAt : null;
+
+      // If tag is within grace period, treat as pass (not failure). An unresolvable tag
+      // age (tagAgeSeconds === null) is not "definitely young" -- fall through to the
+      // original hard-fail behavior below rather than guessing.
+      if (tagAgeSeconds !== null && tagAgeSeconds < TAG_APPROVAL_GRACE_SECONDS) {
+        report({
+          status: "pass",
+          headline: `${releaseTag} has no Studio deployment yet — within the ${TAG_APPROVAL_GRACE_SECONDS}s post-tag approval window, not yet a failure.`,
+          details: [
+            `studio: ${studioUrl}`,
+            `production is serving: ${prod.deployment} (block ${prod.block.toLocaleString()})`,
+            `tag age: ${tagAgeSeconds}s (grace period: ${TAG_APPROVAL_GRACE_SECONDS}s)`,
+          ],
+        });
+        return 0;
+      }
+      
+      // Outside grace period: fall through to original failure behavior
+      const excerpt = studio.reason.replace(/\s+/g, " ").replace(/`/g, "'").slice(0, 200);
+      report({
+        status: "fail",
+        headline: `Cannot read Studio for ${releaseTag}`,
+        details: [
+          `studio: ${studioUrl}`,
+          `production is serving: ${prod.deployment} (block ${prod.block.toLocaleString()})`,
+          excerpt,
+        ],
+      });
+      return 1;
+    }
+
+    // Only the archived case reaches here — the non-archived case already
+    // returned above (grace-period pass, or generic failure).
     report({
       status: "fail",
-      headline: archived
-        ? `Studio no longer serves ${releaseTag} — the version is missing or archived.`
-        : `Cannot read Studio for ${releaseTag}: ${studio.reason}`,
+      headline: `Studio no longer serves ${releaseTag} — the version is missing or archived.`,
       details: [
         `studio: ${studioUrl}`,
         `production is serving: ${prod.deployment} (block ${prod.block.toLocaleString()})`,
-        ...(archived
-          ? [
-              "Check the version label and Studio status. Before deploying a replacement,",
-              "preserve the live upstream. See docs/deployment.md > Promotion path.",
-              "Use a higher version tag for recovery, then follow Consumer cutover",
-              "to publish, validate the gateway endpoint, and update the proxy.",
-            ]
-          : []),
+        "Check the version label and Studio status. Before deploying a replacement,",
+        "preserve the live upstream. See docs/deployment.md > Promotion path.",
+        "Use a higher version tag for recovery, then follow Consumer cutover",
+        "to publish, validate the gateway endpoint, and update the proxy.",
       ],
     });
     return 1;
@@ -253,6 +348,28 @@ async function main() {
       startBlock !== null && prod.block > startBlock
         ? `${(((studio.block - startBlock) / (prod.block - startBlock)) * 100).toFixed(1)}%`
         : "unknown";
+
+    // #5: Check if tag age exceeds ceiling -> fail, else pass with progress. An unresolvable
+    // tag age (tagAgeSeconds === null) is not "definitely stalled" -- fall through to the
+    // original unconditional-pass-with-progress behavior below rather than guessing.
+    const tagCreatedAt = getTagCreatedAt(releaseTag);
+    const tagAgeSeconds =
+      tagCreatedAt !== null ? Math.floor(Date.now() / 1000) - tagCreatedAt : null;
+    if (tagAgeSeconds !== null && tagAgeSeconds > STILL_INDEXING_CEILING_SECONDS) {
+      const ageDays = Math.floor(tagAgeSeconds / 86400);
+      report({
+        status: "fail",
+        headline: `${releaseTag} has been "still indexing" for ${ageDays} day${ageDays === 1 ? "" : "s"} — sync appears stalled, not merely catching up.`,
+        details: [
+          `studio ${releaseTag}: ${studio.deployment} at block ${studio.block.toLocaleString()}`,
+          `production:  ${prod.deployment} at block ${prod.block.toLocaleString()}`,
+          `${lag.toLocaleString()} blocks behind`,
+        ],
+      });
+      return 1;
+    }
+
+    // Below ceiling: keep today's pass-with-progress behavior
     report({
       status: "pass",
       headline: `${releaseTag} is still indexing — cutover is not due yet (${progress} synced).`,
@@ -287,6 +404,8 @@ main()
     process.exitCode = code;
   })
   .catch((error) => {
+    // #10: Also call report so a step summary always exists
+    report({ status: "fail", headline: `Cutover check failed to run: ${error.message}`, details: [] });
     console.log(`::error::Cutover check failed to run: ${error.message}`);
     process.exitCode = 1;
   });

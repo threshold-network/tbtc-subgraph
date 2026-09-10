@@ -152,11 +152,19 @@ non-zero fee rather than `0`.
 It compares `_meta.deployment` from Studio (for the selected release tag) against
 `_meta.deployment` from the proxy, and needs no credentials.
 
-By default, it selects the highest `v*` tag using Git's descending version order
-(`git tag --list 'v*' --sort=-version:refname`), across all fetched tags regardless of commit
-ancestry or tag dates. For example, `v1.10.0` sorts above `v1.9.0`. Recovery and rollback tags
-must increase the version even when reusing the same commit or an older commit. Set
-`RELEASE_TAG` or the workflow's `release_tag` input to check a specific label instead.
+Release selection checks three sources in order:
+1. `RELEASE_TAG` (env var, or the workflow's `release_tag` input) — an explicit override, always
+   wins. Must match `vX.Y.Z`; anything else fails the check before contacting either endpoint.
+2. `RELEASE_POINTER` — a committed file at the repo root holding a single `vX.Y.Z` tag. Absent
+   by default (tag order alone is correct for a normal release); operators create/update it only
+   during a rollback, per [Rollback](#rollback). Malformed content fails the check rather than
+   being silently ignored.
+3. Otherwise, the highest strictly release-shaped `v*` tag (must match `vX.Y.Z`; pre-release
+   tags like `v1.4.0-rc1` are excluded so they can't outrank `v1.4.0` under Git's version sort)
+   using Git's descending version order (`git tag --list 'v*' --sort=-version:refname
+   --no-column`), across all fetched tags regardless of commit ancestry or tag dates. For
+   example, `v1.10.0` sorts above `v1.9.0`. Recovery and rollback releases must increase the
+   version even when reusing the same commit or an older commit.
 
 It cannot run as a post-deploy step — a full re-sync outlasts any job — so it polls instead,
 and stays green while a healthy new version is still indexing, reporting progress. Indexing
@@ -166,10 +174,16 @@ errors on either endpoint fail the check before comparing hashes or sync progres
 | ----------------------------------------------- | ------------------------------------------- |
 | Either endpoint reports indexing errors         | **fail** — unhealthy deployment              |
 | Healthy hashes match                            | pass — the release is live                  |
-| Healthy Studio still indexing                   | pass — cutover not due yet, prints progress |
-| Healthy Studio caught up, proxy hash differs    | **fail** — cutover pending                   |
+| Healthy Studio still indexing (lagging >300 blocks behind proxy) | pass — cutover not due yet, prints progress |
+| Healthy Studio still indexing past the staleness ceiling | **fail** — sync appears stalled, not merely catching up |
+| Healthy Studio caught up (within 300 blocks) but hash mismatch | **fail** — cutover pending                   |
 | Studio version no longer resolves               | **fail** — check missing or archived version |
+| Studio deployment not found, but the tag is within the post-tag approval grace window | pass — not yet a failure |
 | Either endpoint unreachable or malformed         | **fail**                                    |
+
+> **Note**: The threshold of 300 blocks is configured via the `SYNC_LAG_TOLERANCE_BLOCKS` constant in `scripts/check-cutover.mjs`.
+> **Note**: The post-tag approval grace window (`TAG_APPROVAL_GRACE_SECONDS`, default 2 hours) and the still-indexing staleness ceiling (`STILL_INDEXING_CEILING_SECONDS`, default 7 days) are also configured in `scripts/check-cutover.mjs`. A tag whose creation date can't be resolved (e.g. an unfetched tag) skips both checks and keeps the check's original behavior for that outcome, rather than guessing.
+> **Note**: Because `v0.49.0` is the only existing git tag and its Studio version is already archived, the first scheduled run of this check after this PR merges will report **fail** (Studio version no longer resolves). This is expected and will be resolved by cutting and shipping a new release tag (which will create a new Studio version) or by explicitly accepting the red state until then.
 
 Progress is relative to the proxy's indexed block, not an independent chain-head check.
 A pending cutover still requires publishing and validating the deployment-pinned gateway URL
@@ -218,6 +232,16 @@ someone who has it.
 - Note that a subgraph redeploy only changes what new indexing runs from `startBlock` onward if
   the manifest/mappings changed; it does not retroactively fix already-indexed data other than
   by triggering a full re-sync from the pinned `startBlock` in `networks.json`.
+- Update `RELEASE_POINTER` (create it if absent, commit and push the intended live tag) as part
+  of either rollback path above. `scripts/check-cutover.mjs` reads this file first, before
+  falling back to git tag order — without it, tag-order inference cannot represent a rollback
+  to an older release and will misreport a pending cutover back toward the version just rolled
+  away from. Normal operation ships with **no** `RELEASE_POINTER` file; tag order alone is the
+  correct signal until a rollback happens.
+- Remove `RELEASE_POINTER` (commit and push the deletion) once a subsequent forward release
+  supersedes the rollback and reaches production. A file left in place after that point would
+  silently keep pinning every future check to the rollback target instead of the current
+  release, defeating the check's purpose.
 
 ## Networks and addresses
 
