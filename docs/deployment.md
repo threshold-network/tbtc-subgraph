@@ -47,7 +47,11 @@ and retain it for rollback.
    time to gate its post-tag approval window and still-indexing staleness ceiling. A
    lightweight tag has no creation time of its own -- Git reports the *pointed-to commit's*
    date instead, which would misreport a recovery/rollback release (re-tagging an older
-   commit) as however old that commit is.
+   commit) as however old that commit is. **Tradeoff:** the checker treats a lightweight
+   tag's age as unresolvable rather than trusting the wrong date, so both gates silently
+   no-op for one (never fail the release, never fast-pass it either -- just skip straight
+   to the ungated behavior below). Every tag in this repo so far, including `v0.49.0`, is
+   lightweight; the gates only take effect starting with the first annotated release tag.
    This triggers `deploy-mainnet.yaml`, which builds/checks against `mainnet`, then pauses on
    the `production` GitHub Environment for manual approval before running `graph deploy` against
    `tbtc-mainnet`. The tag name is used verbatim as the Studio version label.
@@ -189,12 +193,12 @@ errors on either endpoint fail the check before comparing hashes or sync progres
 | Healthy Studio still indexing past the staleness ceiling | **fail** — sync appears stalled, not merely catching up |
 | Healthy Studio caught up (within 300 blocks) but hash mismatch | **fail** — cutover pending                   |
 | Studio version no longer resolves               | **fail** — check missing or archived version |
-| Studio deployment not found, but the tag is within the post-tag approval grace window | pass — not yet a failure |
+| Studio has no resolvable deployment, but the tag is within the post-tag approval grace window | pass — not yet a failure |
 | Either endpoint unreachable or malformed         | **fail**                                    |
 
 > **Note**: The threshold of 300 blocks is configured via the `SYNC_LAG_TOLERANCE_BLOCKS` constant in `scripts/check-cutover.mjs`.
 > **Note**: The post-tag approval grace window (`TAG_APPROVAL_GRACE_SECONDS`, default 2 hours) and the still-indexing staleness ceiling (`STILL_INDEXING_CEILING_SECONDS`, default 7 days) are also configured in `scripts/check-cutover.mjs`, and both are validated as non-negative integers -- a malformed override fails the check immediately rather than silently disabling the comparison. Both gates require the release tag to be **annotated** (see [Promotion path](#promotion-path)); a lightweight tag, or one git can't resolve (e.g. unfetched), skips both checks and keeps the check's original behavior for that outcome, rather than guessing.
-> **Note**: Because `v0.49.0` is the only existing git tag and its Studio version is already archived, the first scheduled run of this check after this PR merges will report **fail** (Studio version no longer resolves). This is expected and will be resolved by cutting and shipping a new release tag (which will create a new Studio version) or by explicitly accepting the red state until then.
+> **Note**: `v0.49.0` is the only existing git tag and its Studio version is archived, so scheduled runs of this check currently report **fail** (Studio version no longer resolves). This is expected and will be resolved by cutting and shipping a new release tag (which will create a new Studio version) or by explicitly accepting the red state until then.
 
 Progress is relative to the proxy's indexed block, not an independent chain-head check.
 A pending cutover still requires publishing and validating the deployment-pinned gateway URL

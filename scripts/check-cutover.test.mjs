@@ -109,6 +109,20 @@ globalThis.fetch = async (url) => {
   function commit(message) {
     git("-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", message);
   }
+  // Creates a commit backdated by `secondsAgo` via GIT_AUTHOR_DATE/GIT_COMMITTER_DATE.
+  function commitAt(message, secondsAgo) {
+    const date = new Date(Date.now() - secondsAgo * 1000).toISOString();
+    execFileSync(
+      "git",
+      ["-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", message],
+      {
+        cwd: root,
+        env: { ...env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date },
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+  }
   commit("initial fixture");
 
   function run({
@@ -183,6 +197,7 @@ globalThis.fetch = async (url) => {
   return {
     git,
     commit,
+    commitAt,
     run,
     tagAnnotated,
     setReleasePointer: (tag) => writeFileSync(path.join(root, "RELEASE_POINTER"), tag),
@@ -375,7 +390,7 @@ test("a never-deployed Studio label within the tag-approval grace window still p
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(
     result.stdout,
-    /v1\.5\.0 has no Studio deployment yet — within the 7200s post-tag approval window, not yet a failure\./,
+    /v1\.5\.0 has no resolvable Studio deployment yet — within the 7200s post-tag approval window, not yet a failure\./,
   );
   assert.doesNotMatch(result.stdout, /missing or archived/);
 });
@@ -678,15 +693,17 @@ test("a lightweight tag re-tagging an older commit is not misread as an ancient 
   // moment the tag was created -- exactly what a recovery/rollback re-tag of an older
   // commit does (see docs/deployment.md > Rollback). Without the annotated-only guard,
   // this would misreport as however old that commit is and immediately trip the
-  // staleness ceiling on a release that only just started indexing.
+  // staleness ceiling on a release that only just started indexing. The commit is
+  // genuinely backdated (not just older in commit order) so this test would actually
+  // fail -- as "stalled" -- if the annotated-only guard were ever removed.
   const repo = fixture(t);
-  repo.commit("old commit from the past");
+  repo.commitAt("old commit from 30 days ago", 30 * 24 * 3600);
   repo.commit("HEAD moves on");
-  repo.git("tag", "v1.3.0", "HEAD~1"); // lightweight, pointing at the older commit
+  repo.git("tag", "v1.3.0", "HEAD~1"); // lightweight, pointing at the backdated commit
   const result = repo.run({
     releaseTag: "v1.3.0",
     studio: { deployment: "QmRelease", block: { number: 9699 } },
-    stillIndexingCeilingSeconds: 0,
+    stillIndexingCeilingSeconds: 5,
   });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /is still indexing/);
