@@ -602,6 +602,11 @@ dataSources:
         - event: DepositFinalized(indexed uint256,indexed bytes32,indexed
             address,uint256,uint256)
           handler: handleArbitrumDepositFinalized
+        - event: DepositInitialized(indexed uint256,indexed address,indexed address)
+          handler: handleLegacyArbitrumDepositInitialized
+        - event: DepositFinalized(indexed uint256,indexed address,indexed
+            address,uint256,uint256)
+          handler: handleLegacyArbitrumDepositFinalized
         - event: TokensTransferredWithPayload(uint256,address,uint64)
           handler: handleArbitrumTokensTransferredWithPayload
       file: ./src/mappingBridgeActivity.ts
@@ -627,6 +632,11 @@ dataSources:
         - event: DepositFinalized(indexed uint256,indexed bytes32,indexed
             address,uint256,uint256)
           handler: handleBaseDepositFinalized
+        - event: DepositInitialized(indexed uint256,indexed address,indexed address)
+          handler: handleLegacyBaseDepositInitialized
+        - event: DepositFinalized(indexed uint256,indexed address,indexed
+            address,uint256,uint256)
+          handler: handleLegacyBaseDepositFinalized
         - event: TokensTransferredWithPayload(uint256,address,uint64)
           handler: handleBaseTokensTransferredWithPayload
       file: ./src/mappingBridgeActivity.ts
