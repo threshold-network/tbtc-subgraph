@@ -38,11 +38,16 @@ served published deployment indexed and queryable throughout the replacement's f
 and retain it for rollback.
 
 1. Merge feature PRs into `master` (gated by `ci.yaml`, matrix over both networks).
-2. Cut a release by tagging a commit on `master` and pushing the tag:
+2. Cut a release by tagging a commit on `master` with an **annotated** tag and pushing it:
    ```
-   git tag v1.2.3
+   git tag -a v1.2.3 -m "v1.2.3"
    git push origin v1.2.3
    ```
+   Annotated, not lightweight: the cutover checker (below) reads the tag's own creation
+   time to gate its post-tag approval window and still-indexing staleness ceiling. A
+   lightweight tag has no creation time of its own -- Git reports the *pointed-to commit's*
+   date instead, which would misreport a recovery/rollback release (re-tagging an older
+   commit) as however old that commit is.
    This triggers `deploy-mainnet.yaml`, which builds/checks against `mainnet`, then pauses on
    the `production` GitHub Environment for manual approval before running `graph deploy` against
    `tbtc-mainnet`. The tag name is used verbatim as the Studio version label.
@@ -188,7 +193,7 @@ errors on either endpoint fail the check before comparing hashes or sync progres
 | Either endpoint unreachable or malformed         | **fail**                                    |
 
 > **Note**: The threshold of 300 blocks is configured via the `SYNC_LAG_TOLERANCE_BLOCKS` constant in `scripts/check-cutover.mjs`.
-> **Note**: The post-tag approval grace window (`TAG_APPROVAL_GRACE_SECONDS`, default 2 hours) and the still-indexing staleness ceiling (`STILL_INDEXING_CEILING_SECONDS`, default 7 days) are also configured in `scripts/check-cutover.mjs`. A tag whose creation date can't be resolved (e.g. an unfetched tag) skips both checks and keeps the check's original behavior for that outcome, rather than guessing.
+> **Note**: The post-tag approval grace window (`TAG_APPROVAL_GRACE_SECONDS`, default 2 hours) and the still-indexing staleness ceiling (`STILL_INDEXING_CEILING_SECONDS`, default 7 days) are also configured in `scripts/check-cutover.mjs`, and both are validated as non-negative integers -- a malformed override fails the check immediately rather than silently disabling the comparison. Both gates require the release tag to be **annotated** (see [Promotion path](#promotion-path)); a lightweight tag, or one git can't resolve (e.g. unfetched), skips both checks and keeps the check's original behavior for that outcome, rather than guessing.
 > **Note**: Because `v0.49.0` is the only existing git tag and its Studio version is already archived, the first scheduled run of this check after this PR merges will report **fail** (Studio version no longer resolves). This is expected and will be resolved by cutting and shipping a new release tag (which will create a new Studio version) or by explicitly accepting the red state until then.
 
 Progress is relative to the proxy's indexed block, not an independent chain-head check.
