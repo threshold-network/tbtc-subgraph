@@ -69,8 +69,8 @@ An automated build-gate-and-deploy pipeline via GitHub Actions, modeled on
 
 - `ci-checks.yaml` — reusable (`workflow_call`), takes a `network` input. Installs deps
   (`yarn install --frozen-lockfile`), runs `yarn codegen`, then `yarn run build-<network>`. This
-  is the sole correctness gate: the repo has no lint or test suite, so "does codegen + build
-  succeed for this network" is the signal.
+  is the sole correctness gate for the subgraph build: the repo has no lint or test suite for the subgraph itself,
+  but ci.yaml now includes a cutover-tests job that runs a node:test-based regression suite for the cutover checker.
 - `ci.yaml` — triggers on `pull_request` and `push` to `master`. Matrix over
   `network: [sepolia, mainnet]`, each leg calling `ci-checks.yaml`.
 - `deploy-mainnet.yaml` — triggers on `push` of a `v*` tag. `checks` job (network: mainnet) then
@@ -138,9 +138,8 @@ a re-set with `--env production`; no live deploy needed to validate the fix.
   from `node_modules/.bin` without a network fetch, i.e. the same resolution path
   `npx --no-install graph deploy ...` will use in CI.
 - `bash -n` against the retry-loop shell logic in `deploy-mainnet.yaml`.
-- No test framework exists in this repo (no eslint/vitest/Matchstick config) and adding one is
-  out of scope here — the compile-success signal above is the correctness gate this spec relies
-  on, matching what the repo already has.
+- The repo now has a test suite for the cutover checker: scripts/check-cutover.test.mjs, run via node --test in ci.yaml's cutover-tests job.
+- This is the repo's first and only test suite (still no lint gate).
 - Prior art: none in this repo. The workflow shapes are lifted directly from
   `tlabs-xyz/vba-dashboard`'s `ci-checks.yaml`, `cloudflare-pages-prod.yaml`, and
   `osv-scan.yaml`, adapted for a subgraph's build/deploy commands instead of a Vite app's.
