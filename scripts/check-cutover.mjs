@@ -43,30 +43,70 @@ const STUDIO_QUERY_BASE =
   process.env.STUDIO_QUERY_BASE ??
   "https://api.studio.thegraph.com/query/59264/tbtc-mainnet";
 const NETWORK = process.env.NETWORK ?? "mainnet";
-// How far behind the live deployment the new one may be while still counting
-// as "caught up". The two are queried a moment apart and the chain moves, so
-// an exact match would flap. ~300 blocks is about an hour.
-const SYNC_LAG_TOLERANCE_BLOCKS = Number(
-  process.env.SYNC_LAG_TOLERANCE_BLOCKS ?? "300",
-);
-const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS ?? "20000");
-const TAG_APPROVAL_GRACE_SECONDS = Number(process.env.TAG_APPROVAL_GRACE_SECONDS ?? "7200"); // 2 hours
-const STILL_INDEXING_CEILING_SECONDS = Number(process.env.STILL_INDEXING_CEILING_SECONDS ?? "604800"); // 7 days
+// Parses a config env var as a finite non-negative integer, falling back to `fallback`
+// (itself trusted, always one of the literal defaults below) when unset. Rejects NaN,
+// Infinity, negative values, and fractions loudly instead of letting them silently
+// neutralize a comparison (e.g. a non-numeric STILL_INDEXING_CEILING_SECONDS would make
+// `tagAgeSeconds > NaN` always false, masking a genuinely stalled deployment forever).
+function parseNonNegativeInt(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined) return fallback;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(`${name} must be a non-negative integer, got: ${raw}`);
+  }
+  return parsed;
+}
+
+// How far behind the live deployment the new one may be while still counting as "caught
+// up" (SYNC_LAG_TOLERANCE_BLOCKS); an HTTP request budget (REQUEST_TIMEOUT_MS); a
+// post-tag approval grace window (TAG_APPROVAL_GRACE_SECONDS, 2h default); and a
+// still-indexing staleness ceiling (STILL_INDEXING_CEILING_SECONDS, 7d default). Parsed
+// eagerly (not lazily inside main()) so a misconfiguration is reported through the same
+// report()/step-summary path as every other failure below, rather than crashing with a
+// raw stack trace before report() is ever called.
+let SYNC_LAG_TOLERANCE_BLOCKS;
+let REQUEST_TIMEOUT_MS;
+let TAG_APPROVAL_GRACE_SECONDS;
+let STILL_INDEXING_CEILING_SECONDS;
+let configOk = true;
+try {
+  SYNC_LAG_TOLERANCE_BLOCKS = parseNonNegativeInt("SYNC_LAG_TOLERANCE_BLOCKS", 300);
+  REQUEST_TIMEOUT_MS = parseNonNegativeInt("REQUEST_TIMEOUT_MS", 20000);
+  TAG_APPROVAL_GRACE_SECONDS = parseNonNegativeInt("TAG_APPROVAL_GRACE_SECONDS", 7200);
+  STILL_INDEXING_CEILING_SECONDS = parseNonNegativeInt("STILL_INDEXING_CEILING_SECONDS", 604800);
+} catch (error) {
+  // `report` is a hoisted function declaration further down this file; calling it here,
+  // during initial module evaluation, is safe.
+  report({ status: "fail", headline: `Invalid configuration: ${error.message}`, details: [] });
+  console.log(`::error::Invalid configuration: ${error.message}`);
+  process.exitCode = 1;
+  configOk = false;
+}
 
 const META_QUERY = "{ _meta { deployment block { number } hasIndexingErrors } }";
 
-// Helper to get tag creation timestamp (Unix epoch seconds).
+// Helper to get tag creation timestamp (Unix epoch seconds), for an ANNOTATED tag only.
 // Returns null if the git call fails (unresolvable tag, e.g. RELEASE_TAG/RELEASE_POINTER
-// naming a tag not fetched locally) so callers can skip age-based logic entirely rather
-// than misreading an unknown age as an infinitely old one.
+// naming a tag not fetched locally), or if the tag is lightweight, so callers can skip
+// age-based logic entirely rather than misreading an unknown age as an infinitely old one.
+//
+// A lightweight tag has no object of its own: `%(creatordate)` on one resolves to the
+// *pointed-to commit's* author date, not the moment the tag was created. A recovery or
+// rollback release re-tagging an older commit (see docs/deployment.md > Rollback) would
+// then misreport as however old that commit is, immediately tripping the staleness
+// ceiling on a release that just started indexing. Annotated tags carry their own
+// creation time independent of the commit they point at, so only those are trusted.
 function getTagCreatedAt(tag) {
   try {
     const output = execFileSync(
       "git",
-      ["for-each-ref", "--format=%(creatordate:unix)", `refs/tags/${tag}`],
+      ["for-each-ref", "--format=%(objecttype) %(creatordate:unix)", `refs/tags/${tag}`],
       { cwd: repoRoot, encoding: "utf8" },
     );
-    const parsed = parseInt(output.trim(), 10);
+    const [objectType, dateStr] = output.trim().split(" ");
+    if (objectType !== "tag") return null;
+    const parsed = parseInt(dateStr, 10);
     return Number.isFinite(parsed) ? parsed : null;
   } catch {
     return null;
@@ -163,7 +203,7 @@ async function queryMeta(url, label) {
     });
     bodyText = await response.text();
   } catch (error) {
-    return { ok: false, reason: `${label} unreachable: ${error.message}` };
+    return { ok: false, kind: "unreachable", reason: `${label} unreachable: ${error.message}` };
   }
 
   let payload;
@@ -174,16 +214,22 @@ async function queryMeta(url, label) {
     const excerpt = bodyText.replace(/\s+/g, " ").replace(/`/g, "'").slice(0, 200);
     return {
       ok: false,
+      kind: "malformed",
       reason: `${label} returned non-JSON (HTTP ${response.status}): ${excerpt}`,
     };
   }
 
   if (payload.errors?.length) {
     const message = payload.errors.map((e) => e.message).join("; ");
-    // Studio answers this way for a version label that was never deployed or
-    // has since been archived. It is a distinct failure from "wrong hash".
+    // Studio answers this way for a version label that was never deployed or has since
+    // been archived -- the only failure kind eligible for the post-tag approval grace
+    // period below, since it's the only one indistinguishable from "not deployed yet".
     const missing = /does not exist|not found/i.test(message);
-    return { ok: false, missing, reason: `${label}: ${message}` };
+    return {
+      ok: false,
+      kind: missing ? "missing" : "graphql-error",
+      reason: `${label}: ${message}`,
+    };
   }
 
   const meta = payload.data?._meta;
@@ -192,6 +238,7 @@ async function queryMeta(url, label) {
     const excerpt = bodyText.replace(/\s+/g, " ").replace(/`/g, "'").slice(0, 200);
     return {
       ok: false,
+      kind: "malformed",
       reason: `${label} returned no usable _meta: ${excerpt}`,
     };
   }
@@ -258,30 +305,11 @@ async function main() {
   }
 
   if (!studio.ok) {
-    const archived = studio.missing === true;
-    // Handle non-archived case: check grace period for young tags
-    if (!archived) {
-      const tagCreatedAt = getTagCreatedAt(releaseTag);
-      const tagAgeSeconds =
-        tagCreatedAt !== null ? Math.floor(Date.now() / 1000) - tagCreatedAt : null;
-
-      // If tag is within grace period, treat as pass (not failure). An unresolvable tag
-      // age (tagAgeSeconds === null) is not "definitely young" -- fall through to the
-      // original hard-fail behavior below rather than guessing.
-      if (tagAgeSeconds !== null && tagAgeSeconds < TAG_APPROVAL_GRACE_SECONDS) {
-        report({
-          status: "pass",
-          headline: `${releaseTag} has no Studio deployment yet — within the ${TAG_APPROVAL_GRACE_SECONDS}s post-tag approval window, not yet a failure.`,
-          details: [
-            `studio: ${studioUrl}`,
-            `production is serving: ${prod.deployment} (block ${prod.block.toLocaleString()})`,
-            `tag age: ${tagAgeSeconds}s (grace period: ${TAG_APPROVAL_GRACE_SECONDS}s)`,
-          ],
-        });
-        return 0;
-      }
-      
-      // Outside grace period: fall through to original failure behavior
+    if (studio.kind !== "missing") {
+      // Unreachable, non-JSON, unusable _meta, or an unrelated GraphQL error: these are
+      // infrastructure/response-shape problems, not "not deployed yet". Never eligible
+      // for the grace period below -- a young tag must not turn a genuine Studio outage
+      // into a silent pass.
       const excerpt = studio.reason.replace(/\s+/g, " ").replace(/`/g, "'").slice(0, 200);
       report({
         status: "fail",
@@ -295,8 +323,32 @@ async function main() {
       return 1;
     }
 
-    // Only the archived case reaches here — the non-archived case already
-    // returned above (grace-period pass, or generic failure).
+    // kind === "missing": Studio has no queryable data at this version label. This is
+    // the one failure Studio reports identically whether the tag was never deployed yet
+    // or was deployed and later archived -- there is no way to tell them apart from the
+    // response alone. Grant the post-tag approval grace period here, and only here.
+    const tagCreatedAt = getTagCreatedAt(releaseTag);
+    const tagAgeSeconds =
+      tagCreatedAt !== null ? Math.floor(Date.now() / 1000) - tagCreatedAt : null;
+
+    // If tag is within grace period, treat as pass (not failure). An unresolvable tag
+    // age (tagAgeSeconds === null, e.g. a lightweight tag or one git can't resolve) is
+    // not "definitely young" -- fall through to the hard-fail below rather than guessing.
+    if (tagAgeSeconds !== null && tagAgeSeconds < TAG_APPROVAL_GRACE_SECONDS) {
+      report({
+        status: "pass",
+        headline: `${releaseTag} has no Studio deployment yet — within the ${TAG_APPROVAL_GRACE_SECONDS}s post-tag approval window, not yet a failure.`,
+        details: [
+          `studio: ${studioUrl}`,
+          `production is serving: ${prod.deployment} (block ${prod.block.toLocaleString()})`,
+          `tag age: ${tagAgeSeconds}s (grace period: ${TAG_APPROVAL_GRACE_SECONDS}s)`,
+        ],
+      });
+      return 0;
+    }
+
+    // Outside the grace period (or age unresolvable): missing or archived, same message
+    // either way since the two are indistinguishable here.
     report({
       status: "fail",
       headline: `Studio no longer serves ${releaseTag} — the version is missing or archived.`,
@@ -399,13 +451,15 @@ async function main() {
   return 1;
 }
 
-main()
-  .then((code) => {
-    process.exitCode = code;
-  })
-  .catch((error) => {
-    // #10: Also call report so a step summary always exists
-    report({ status: "fail", headline: `Cutover check failed to run: ${error.message}`, details: [] });
-    console.log(`::error::Cutover check failed to run: ${error.message}`);
-    process.exitCode = 1;
-  });
+if (configOk) {
+  main()
+    .then((code) => {
+      process.exitCode = code;
+    })
+    .catch((error) => {
+      // #10: Also call report so a step summary always exists
+      report({ status: "fail", headline: `Cutover check failed to run: ${error.message}`, details: [] });
+      console.log(`::error::Cutover check failed to run: ${error.message}`);
+      process.exitCode = 1;
+    });
+}
