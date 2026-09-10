@@ -7,6 +7,21 @@ const root = new URL("../", import.meta.url)
 const manifest = YAML.parse(readFileSync(new URL("subgraph.yaml", root), "utf8"))
 const normalize = (signature) => signature.replace(/\s+/g, "")
 
+test("receipt-enabled event handlers require mapping API 0.0.7 or later", () => {
+    // Graph Node rejects receipt subscriptions on earlier mapping APIs,
+    // even when graph codegen and graph build succeed.
+    for (const source of [...manifest.dataSources, ...(manifest.templates ?? [])]) {
+        if (!source.mapping.eventHandlers?.some(({receipt}) => receipt === true)) continue
+        const version = source.mapping.apiVersion
+        assert.match(version, /^\d+\.\d+\.\d+$/, `${source.name} has an invalid mapping API version`)
+        const [major, minor, patch] = version.split(".").map(Number)
+        assert.ok(
+            major > 0 || minor > 0 || patch >= 7,
+            `${source.name} requests receipts but uses mapping API ${version}; requires >= 0.0.7`
+        )
+    }
+})
+
 for (const chain of ["Arbitrum", "Base"]) {
     test(`${chain} activity subscribes to both lifecycle event eras`, () => {
         const source = manifest.dataSources.find(({name}) => name === `${chain}L1BitcoinDepositor`)
