@@ -152,14 +152,31 @@ export function handleDepositRevealed(event: DepositRevealed): void {
     transaction.description = "Deposit Revealed"
     transaction.save()
 
+    // `try_deposits`, not `deposits`: a plain call aborts the whole mapping when
+    // it reverts, halting the subgraph. The repo ABI declares the current
+    // 7-field DepositRequest (including `extraData`, added by a later Bridge
+    // upgrade), so calling it against the older implementation live at early
+    // Bridge blocks fails and takes indexing down with it. Observed at block
+    // 16523905, which stalled the v0.50.0 sync at 27%.
     let bridgeContract = Bridge.bind(event.address)
-    let depositsContract = bridgeContract.deposits(Utils.byteArrayToBigint(id))
+    let depositsCall = bridgeContract.try_deposits(Utils.byteArrayToBigint(id))
 
     let deposit = getOrCreateDeposit(Bytes.fromByteArray(id))    
     deposit.status = "REVEALED"
     deposit.user = event.params.depositor
     deposit.amount = event.params.amount
-    deposit.treasuryFee = depositsContract.treasuryFee
+    // Leave the zero from getOrCreateDeposit when the record is unreadable, and
+    // say so in the logs rather than passing an invented fee off as on-chain
+    // truth. Only pre-upgrade reveals are affected; every later one still reads
+    // its real fee.
+    if (depositsCall.reverted) {
+        log.warning(
+            "handleDepositRevealed: Bridge.deposits reverted for deposit {} at block {}; leaving treasuryFee = 0",
+            [Bytes.fromByteArray(id).toHexString(), event.block.number.toString()]
+        )
+    } else {
+        deposit.treasuryFee = depositsCall.value.treasuryFee
+    }
     deposit.walletPubKeyHash = event.params.walletPubKeyHash
     deposit.fundingTxHash = event.params.fundingTxHash
     deposit.fundingOutputIndex = event.params.fundingOutputIndex
