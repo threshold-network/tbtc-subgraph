@@ -40,7 +40,7 @@ function leftPadAddressTo32Bytes(address: Bytes): Bytes {
     return new Bytes(12).concat(address)
 }
 
-function createBridgeActivity(
+export function createBridgeActivity(
     event: ethereum.Event,
     activityType: string,
     direction: string,
