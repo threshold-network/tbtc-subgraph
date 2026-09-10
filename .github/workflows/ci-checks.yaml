@@ -1,6 +1,6 @@
 # Reusable workflow: validates the subgraph compiles for a given network.
-# The mappings have no unit-test suite — the meaningful compile gate for a
-# subgraph is "does codegen + graph build succeed",
+# Mapping regression tests run separately in ci.yaml. The compile gate checks
+# codegen + graph build for both networks,
 # i.e. do schema.graphql, the ABIs, and the AssemblyScript mappings agree.
 # Used by ci.yaml (PR + master, both networks) and by deploy-mainnet.yaml's own
 # `checks` job (mainnet only, matching that deploy target).

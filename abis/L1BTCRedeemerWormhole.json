@@ -4,98 +4,9 @@
     "inputs": [
       {
         "indexed": true,
-        "internalType": "bytes32",
-        "name": "sender",
-        "type": "bytes32"
-      },
-      {
-        "indexed": false,
-        "internalType": "bool",
-        "name": "allowed",
-        "type": "bool"
-      }
-    ],
-    "name": "AllowedSenderUpdated",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
         "internalType": "uint256",
-        "name": "redemptionTxMaxTotalFee",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "redemptionProofGasOffset",
-        "type": "uint256"
-      }
-    ],
-    "name": "GasOffsetParametersUpdated",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "uint8",
-        "name": "version",
-        "type": "uint8"
-      }
-    ],
-    "name": "Initialized",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "previousOwner",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "newOwner",
-        "type": "address"
-      }
-    ],
-    "name": "OwnershipTransferred",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "relayer",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "bool",
-        "name": "authorized",
-        "type": "bool"
-      }
-    ],
-    "name": "ReimbursementAuthorizationUpdated",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "bytes32",
         "name": "redemptionKey",
-        "type": "bytes32"
+        "type": "uint256"
       },
       {
         "indexed": true,
@@ -127,240 +38,45 @@
         "type": "tuple"
       },
       {
-        "indexed": false,
+        "indexed": true,
         "internalType": "bytes",
-        "name": "redeemerOutputScript",
+        "name": "redemptionOutputScript",
         "type": "bytes"
       },
       {
         "indexed": false,
-        "internalType": "uint64",
+        "internalType": "uint256",
         "name": "amount",
-        "type": "uint64"
+        "type": "uint256"
       }
     ],
     "name": "RedemptionRequested",
     "type": "event"
   },
   {
+    "anonymous": false,
     "inputs": [
       {
-        "internalType": "bytes32",
-        "name": "",
-        "type": "bytes32"
-      }
-    ],
-    "name": "allowedSenders",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "bridge",
-    "outputs": [
-      {
-        "internalType": "contract IBridge",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "contract IBridge",
-        "name": "_bridge",
-        "type": "address"
-      },
-      {
-        "internalType": "contract IWormholeTokenBridge",
-        "name": "_wormholeTokenBridge",
-        "type": "address"
-      },
-      {
-        "internalType": "contract IERC20",
-        "name": "_tbtcToken",
-        "type": "address"
-      }
-    ],
-    "name": "initialize",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "owner",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "redemptionProofGasOffset",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "redemptionTxMaxTotalFee",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "name": "reimbursementAuthorizations",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "renounceOwnership",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes",
-        "name": "encodedVm",
-        "type": "bytes"
-      }
-    ],
-    "name": "requestRedemption",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "tbtcToken",
-    "outputs": [
-      {
-        "internalType": "contract IERC20",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "newOwner",
-        "type": "address"
-      }
-    ],
-    "name": "transferOwnership",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
+        "indexed": true,
         "internalType": "bytes32",
         "name": "sender",
         "type": "bytes32"
       },
       {
+        "indexed": false,
         "internalType": "bool",
         "name": "allowed",
         "type": "bool"
       }
     ],
-    "name": "updateAllowedSender",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_redemptionTxMaxTotalFee",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_redemptionProofGasOffset",
-        "type": "uint256"
-      }
-    ],
-    "name": "updateGasOffsetParameters",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "relayer",
-        "type": "address"
-      },
-      {
-        "internalType": "bool",
-        "name": "authorized",
-        "type": "bool"
-      }
-    ],
-    "name": "updateReimbursementAuthorization",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    "name": "AllowedSenderUpdated",
+    "type": "event"
   },
   {
     "inputs": [],
     "name": "wormholeTokenBridge",
     "outputs": [
       {
-        "internalType": "contract IWormholeTokenBridge",
         "name": "",
         "type": "address"
       }

@@ -4,3 +4,5 @@
 yarn-error.log
 .idea
 package-lock.json
+/tests/.bin
+/tests/.latest.json
