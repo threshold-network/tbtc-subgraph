@@ -23,8 +23,12 @@ catch multi-network compile regressions; nothing deploys it anywhere.
 ## Promotion path
 
 **Before pushing a release tag or approving the production deploy**, record the live
-deployment hash and securely retain its query URL for rollback. Confirm the Worker uses a
-published gateway endpoint pinned to that deployment (see [Consumer cutover](#consumer-cutover)).
+deployment hash and its query URL, and store both somewhere access-controlled — this URL
+embeds the production gateway API key and must never be pasted into Slack, GitHub issues,
+PRs, or other shared/logged locations (no team-wide storage convention is established yet;
+see Required repo configuration below). Confirm the Worker uses a published gateway endpoint
+pinned to that deployment by following [Consumer cutover](#consumer-cutover) steps 1-3 —
+reading the Worker's config alone cannot confirm this, since Worker secrets are write-only.
 If production still serves an unpublished Studio version, publish that existing version,
 validate its gateway endpoint, and cut the consumer over to it **before deploying a replacement**.
 
@@ -45,17 +49,17 @@ and retain it for rollback.
 3. Wait for the new version to finish indexing in Studio before publishing it. There is
    no graft in `subgraph.yaml`, so every deploy is a **full re-sync from the earliest
    `startBlock` in `networks.json`** (mainnet: block 13,042,356, the TBTC token). That is
-   ~13M blocks with call handlers that make `eth_call`s per sweep — budget hours to days, not
-   minutes. Poll the version's own Studio query URL until `_meta.block.number` reaches chain
-   head:
+   chain head minus that block — over 10M blocks today, with an `eth_call` per revealed
+   deposit (src/mappingBridge.ts) plus callHandlers that require block traces — budget
+   hours to days, not minutes. Poll the version's own Studio query URL until
+   `_meta.block.number` reaches chain head:
    ```
    curl -s -X POST https://api.studio.thegraph.com/query/59264/tbtc-mainnet/v1.2.3 \
      -H 'content-type: application/json' \
      -d '{"query":"{ _meta { block { number } hasIndexingErrors } }"}'
    ```
-4. **Cut the consumer over to the new version** — see [Consumer cutover](#consumer-cutover).
-   Deploying to Studio does not change what `api.threshold.network` serves. Skipping this step
-   means the release is invisible in production.
+4. Publish the version to the decentralized network and cut the consumer over — see
+   [Consumer cutover](#consumer-cutover), which covers both.
 5. Verify through the consumer, not through Studio — see [Verifying a release is live](#verifying-a-release-is-live).
 6. Optionally create a GitHub Release from the tag (`gh release create v1.2.3`) to record what
    shipped — this is a manual step, not automated by CI.
@@ -115,7 +119,7 @@ Repeat with `--env staging` if the staging Worker should track the same version.
 
 **Breaking changes.** The Worker forwards GraphQL verbatim and does not validate against a
 schema, so a schema change that removes or renames a field surfaces as a query error in the
-dApp at cutover, not at deploy. Coordinate a consumer release before cutting over when a tag
+dApp at cutover, not at deploy. Coordinate a dApp explorer release before cutting over when a tag
 contains one.
 
 ## Verifying a release is live
@@ -130,17 +134,19 @@ curl -s -X POST https://api.threshold.network/subgraph/mainnet \
   -d '{"query":"{ _meta { deployment block { number } hasIndexingErrors } }"}'
 ```
 
-Confirm all three:
+Confirm 1 and 2 always; confirm 3 for a schema-changing release, substituting the value
+spot-check below for a value-only fix.
 
 1. `_meta.deployment` matches the intended deployment hash from the deploy job's
    `Build completed: Qm...` line. (The job's `Deployed to ...` line is only the Studio dashboard
    URL, not the hash.) When migrating the existing live version to a published endpoint in
    the pre-deploy check, this must still be the recorded pre-migration hash.
 2. `_meta.block.number` is at chain head and `hasIndexingErrors` is `false`.
-3. A field or entity introduced by the release actually resolves. A schema addition is the
-   cheapest positive signal that the new mappings are live — e.g. after a release that adds
-   `routedDeposits`, `{ routedDeposits(first:1) { id } }` returns data instead of
-   `Type 'Query' has no field 'routedDeposits'`.
+3. A field introduced by the release actually resolves. A schema addition is the
+   cheapest positive signal that the new mappings are live — e.g. after a release that
+   adds `isRouted` and `destinationOwner` to the `Deposit` entity,
+   `{ deposits(first:1, where:{isRouted:true}) { id destinationOwner } }` returns data
+   instead of an error indicating the field doesn't exist on `Deposit`.
 
 For a release that fixes indexed *values* rather than the schema, spot-check a record the fix
 was supposed to correct — e.g. for the `treasuryFee` fix, an old swept deposit should report a
@@ -210,11 +216,18 @@ temporary Git repositories and mocked responses, need no dependencies, and run i
 - **Environment** (Settings > Environments): create `production` and add required reviewers.
   Without a reviewer configured, the environment gate is a no-op and the mainnet deploy runs
   unattended the moment `checks` passes.
+- The wallet/account authorized to publish `tbtc-mainnet` to The Graph's decentralized
+  network is the same Studio account that holds `GRAPH_DEPLOY_KEY_MAINNET` above — no
+  separate publish credential exists.
+- The production gateway API key (embedded in the query URL, used to construct
+  authenticated query URLs) is issued by The Graph's gateway per query key and has **no
+  established storage location yet** — decide on one and record it here before relying on
+  this runbook for a release.
 
 Note that the consumer-side credential is **not** in this repo: the `SUBGRAPH_GATEWAY_URL_*`
 secrets live on the `threshold-api` Cloudflare Worker and are set with `wrangler secret put`.
-Whoever cuts a release needs Cloudflare access to that Worker, or needs to hand step 4 to
-someone who has it.
+Whoever cuts a release needs Cloudflare access to that Worker, or must hand the entire Consumer
+cutover procedure to someone who has it.
 
 ## Rollback
 
@@ -224,11 +237,13 @@ someone who has it.
   separate Worker code deployment. Verify the previous deployment hash through the proxy
   with the cache bypass described above.
 - If the previous deployment is unavailable, follow the pre-deploy check in
-  [Promotion path](#promotion-path), then re-tag the last-good commit with a new `v*` tag and
-  push it. The workflow redeploys the known-good manifest/mappings to `tbtc-mainnet`; wait for
-  syncing, publish, validate the gateway endpoint, and cut the consumer over as for a release.
-  Do not delete or reuse the bad tag. A Studio redeploy or dashboard promotion alone does not
-  change the Worker's pinned upstream.
+  [Promotion path](#promotion-path), then re-tag the last-good commit with a new `v*` tag
+  and push it. The workflow redeploys the known-good manifest/mappings to `tbtc-mainnet`;
+  wait for syncing, publish, validate the gateway endpoint, and cut the consumer over as
+  for a release. Doing the pre-deploy check here keeps the current, faulty deployment
+  queryable as a safety net during the fix's re-sync (and is a no-op if that deployment
+  is already published). Do not delete or reuse the bad tag. A Studio redeploy or
+  dashboard promotion alone does not change the Worker's pinned upstream.
 - Note that a subgraph redeploy only changes what new indexing runs from `startBlock` onward if
   the manifest/mappings changed; it does not retroactively fix already-indexed data other than
   by triggering a full re-sync from the pinned `startBlock` in `networks.json`.

@@ -13,10 +13,11 @@ There is no automated pipeline for this subgraph. Every deploy — sepolia or ma
 manual, local `graph-cli` invocation by whoever happens to have Studio access on their machine.
 Nothing validates that the manifest compiles before a human runs `graph deploy`. There is no
 versioned release history: mainnet deploys leave no record of what was shipped or when. A
-mistake in a manual mainnet deploy has no gate — it goes straight to the Studio subgraph other
-consumers query. Separately, `README.md`'s deploy instructions describe a dead `goerli` network
-and a deprecated `--product hosted-service` auth flow, so a new contributor following it hits a
-wall immediately.
+mistake in a manual mainnet deploy has no gate — it reaches the Studio subgraph ungated, but
+exposure to production consumers requires the separate Consumer cutover step documented in
+`docs/deployment.md`. Separately, `README.md`'s deploy instructions describe a dead `goerli`
+network and a deprecated `--product hosted-service` auth flow, so a new contributor following it
+hits a wall immediately.
 
 ## Solution
 
@@ -42,7 +43,8 @@ An automated build-gate-and-deploy pipeline via GitHub Actions, modeled on
 2. As a release manager, I want to cut a mainnet release by pushing a version tag, so that
    production deploys are versioned and reproducible.
 3. As a release manager, I want the mainnet deploy to pause for my explicit approval, so that a
-   bad tag can't silently reach the production consumers already querying `tbtc-mainnet`.
+   bad tag can't silently reach the Studio subgraph (the separate Consumer cutover step in
+   `docs/deployment.md` governs actual production consumer exposure).
 4. As an on-call engineer, I want a documented rollback procedure, so that I can recover quickly
    if a deploy misbehaves.
 5. As a security-conscious maintainer, I want dependency vulnerabilities introduced by this
@@ -235,3 +237,4 @@ a re-set with `--env production`; no live deploy needed to validate the fix.
   historical record of what actually happened before this track was cut; they are not
   retroactively false, just describing a track that no longer exists. The now-unused
   `GRAPH_DEPLOY_KEY_SEPOLIA` repo secret should be deleted as part of this cleanup.
+- **Approval-gate scope corrected (post-implementation correction):** the Problem Statement and User Story 3 originally implied the production approval gate itself protects production consumers from a bad deploy. `docs/deployment.md`'s Consumer cutover section and its documented v0.49.0 incident (a Studio deploy succeeded but production consumers never saw it) prove the gate only protects the Studio subgraph deploy — reaching production consumers is a separate, explicit Consumer cutover step. Problem Statement and User Story 3 were revised to reflect this narrower, accurate scope.
