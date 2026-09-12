@@ -24,7 +24,7 @@ regressions; nothing deploys it anywhere.
 
 ## Toolchain setup and dependency fixes
 
-Use Node 22 and Yarn 1.22.22, matching CI. The repository pins Graph CLI 0.98.1 and
+Use Node 22 (at least 22.13.0) and Yarn 1.22.22, matching CI. The repository pins Graph CLI 0.98.1 and
 `@graphprotocol/graph-ts` 0.31.0. Install from the committed `yarn.lock`:
 
 ```sh
@@ -34,6 +34,10 @@ yarn build-mainnet
 yarn build-sepolia
 node --test scripts/check-toolchain.test.mjs scripts/check-cutover.test.mjs
 ```
+
+Installation applies the committed Jayson compatibility patch needed for the
+patched streaming dependency. Keep install scripts enabled; a patch failure
+must be resolved before building or deploying. See [dependency security](dependency-security.md).
 
 Local network builds rewrite `subgraph.yaml`; review and restore their incidental changes
 before committing, as described in [Networks and addresses](#networks-and-addresses).

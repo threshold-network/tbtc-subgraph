@@ -80,10 +80,10 @@ An automated build-gate-and-deploy pipeline via GitHub Actions, modeled on
   approval before the job starts), running `graph deploy tbtc-mainnet` with the mainnet
   network and tag's version label. Graph CLI 0.98.1 defaults to Studio and no longer accepts
   `--studio`.
-- `osv-scan.yaml` — new. Mirrors `vba-dashboard`'s pattern using the
+- `osv-scan.yaml` — mirrors `vba-dashboard`'s pattern using the
   `google/osv-scanner-action` reusable workflows (pinned to the same commit SHA vba-dashboard
-  uses): non-blocking diff-aware scan on `pull_request`, full scan on `push` to `master`.
-  Both retain `fail-on-vuln: false`; remaining scanner matches and their applicability are
+  uses): diff-aware scan on `pull_request`, full scan on `push` to `master`.
+  Both use `fail-on-vuln: true`; the patched dependency versions and compatibility patch are
   documented in `docs/dependency-security.md`. Points `--lockfile` at `./yarn.lock` instead of
   `pnpm-lock.yaml`. Deny-all top-level `permissions: {}`, with each job granting only what the
   reusable workflow's declared ceiling requires (`actions: read`, `contents: read`,
@@ -99,9 +99,10 @@ An automated build-gate-and-deploy pipeline via GitHub Actions, modeled on
   `actions/setup-node`, `google/osv-scanner-action`'s reusable workflows), matching
   `vba-dashboard`'s supply-chain hygiene bar. Same SHAs reused where the same action version
   applies.
-- Node 22, pinned to major version only (`'22'`) rather than an exact minor/patch — this repo
-  has no `.nvmrc` or `engines` field to match against, and pinning tighter than that adds
-  maintenance cost for no benefit here.
+- Node 22, pinned to major version (`'22'`) so CI picks up maintained patches. The
+  repository's `engines` field requires at least 22.13.0 for Jayson's CommonJS imports
+  of the patched ESM streaming dependency. Installation applies the committed patch
+  automatically and fails if it cannot apply.
 - Retry policy on Studio deploys: 3 attempts, sleeping `attempt * 15` seconds between retries
   (15s, 30s), scoped to the `graph deploy` step only — build/codegen failures fail immediately
   since retrying a deterministic compile error is pointless.

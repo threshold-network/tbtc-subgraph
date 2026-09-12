@@ -1,0 +1,24 @@
+diff --git a/node_modules/jayson/lib/utils.js b/node_modules/jayson/lib/utils.js
+--- a/node_modules/jayson/lib/utils.js
++++ b/node_modules/jayson/lib/utils.js
+@@ -1,7 +1,7 @@
+ 'use strict';
+
+-const StreamValues = require('stream-json/streamers/StreamValues');
+-const Verifier = require('stream-json/utils/Verifier');
++const StreamValues = require('stream-json/streamers/stream-values.js').streamValues;
++const Verifier = require('stream-json/utils/verifier.js').verifier;
+ const JSONstringify = require('json-stringify-safe');
+ const uuid = require('uuid').v4;
+
+@@ -74,8 +74,8 @@ Utils.parseStream = function(stream, options, onRequest) {
+   const onError = Utils.once(onRequest);
+   const onSuccess = (...args) => onRequest(null, ...args);
+
+-  const verifier = new Verifier({jsonStreaming: true});
+-  const parser = StreamValues.withParser();
++  const verifier = Verifier.asStream({jsonStreaming: true, writableObjectMode: false});
++  const parser = StreamValues.withParserAsStream();
+
+   parser.on('data', function(obj) {
+     let data = obj.value;
