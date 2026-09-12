@@ -5,10 +5,10 @@ name: OSV-Scanner
 # permissions are deny-all, each job opts into only the minimum scopes it
 # needs. Mirrors tlabs-xyz/vba-dashboard's osv-scan.yaml, adapted for yarn.
 #
-# The Graph CLI upgrade removes the original vulnerable dependency tree.
-# Scans remain non-blocking because uuid and stream-json still match
-# advisories for APIs this toolchain does not call. Keep findings visible;
-# docs/dependency-security.md records the exact exclusions and evidence.
+# The Graph CLI upgrade and compatibility patch remove the known vulnerable
+# dependency versions. Findings now fail the scan so future dependency
+# updates cannot silently rely on the former UUID/stream-json exceptions.
+# docs/dependency-security.md records the patched versions and validation.
 
 on:
   pull_request:
@@ -19,7 +19,7 @@ permissions: {}
 
 jobs:
   # Diff-aware scan on PRs: reports vulnerabilities the PR's lockfile diff
-  # introduces or touches. Non-blocking (fail-on-vuln: false) — see header.
+  # introduces or touches. Findings fail the workflow.
   scan-pr:
     if: github.event_name == 'pull_request'
     permissions:
@@ -36,7 +36,7 @@ jobs:
       scan-args: |-
         --lockfile=./yarn.lock
       upload-sarif: false
-      fail-on-vuln: false
+      fail-on-vuln: true
 
   # Full scan on pushes to master.
   scan-full:
@@ -52,4 +52,4 @@ jobs:
       scan-args: |-
         --lockfile=./yarn.lock
       upload-sarif: false
-      fail-on-vuln: false
+      fail-on-vuln: true

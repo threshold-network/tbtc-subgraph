@@ -15,12 +15,17 @@ import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { PassThrough, Readable } from "node:stream";
+import { finished, pipeline } from "node:stream/promises";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 const require = createRequire(import.meta.url);
 const cliRoot = path.dirname(require.resolve("@graphprotocol/graph-cli/package.json"));
+const cliRequire = createRequire(path.join(cliRoot, "package.json"));
+const jayson = cliRequire("jayson");
+const jaysonRequire = createRequire(cliRequire.resolve("jayson"));
 const { extractZipAndGetExe } = await import(
   pathToFileURL(path.join(cliRoot, "dist/command-helpers/local-node.js"))
 );
@@ -30,6 +35,122 @@ const { chooseNodeUrl } = await import(
 
 test("CLI defaults to Subgraph Studio without the removed --studio flag", () => {
   assert.deepEqual(chooseNodeUrl({}), { node: "https://api.studio.thegraph.com/deploy/" });
+});
+
+// Resolve through the actual CLI caller so an unused patched copy cannot
+// conceal an older vulnerable dependency still selected by Jayson.
+const uuid = jaysonRequire("uuid");
+for (const method of ["v3", "v5", "v6"]) {
+  test(`UUID ${method} rejects invalid output bounds without partial writes`, () => {
+    const args = method === "v6"
+      ? [{ msecs: 0, nsecs: 0, clockseq: 0, node: [1, 2, 3, 4, 5, 6] }]
+      : ["toolchain-fixture", uuid[method].DNS];
+    for (const Type of [Buffer, Uint8Array]) {
+      const allocate = (size) => Type === Buffer ? Buffer.alloc(size, 0xaa) : new Uint8Array(size).fill(0xaa);
+      for (const [size, offset] of [[8, 4], [16, 1], [16, -1], [17, 2]]) {
+        const buffer = allocate(size);
+        assert.throws(() => uuid[method](...args, buffer, offset), RangeError);
+        assert.ok(buffer.every((byte) => byte === 0xaa), "rejected writes must leave the buffer unchanged");
+      }
+      const buffer = allocate(24);
+      assert.equal(uuid[method](...args, buffer, 4), buffer);
+      assert.equal(uuid.stringify(buffer, 4), uuid[method](...args));
+      assert.ok(buffer.subarray(0, 4).every((byte) => byte === 0xaa));
+      assert.ok(buffer.subarray(20).every((byte) => byte === 0xaa));
+    }
+  });
+}
+
+for (const name of ["pick", "ignore", "filter", "replace"]) {
+  test(`stream-json ${name} bounds deeply nested path filtering`, { timeout: 10_000 }, async () => {
+    const factory = jaysonRequire(`stream-json/filters/${name}.js`)[name];
+    const { streamValues } = jaysonRequire("stream-json/streamers/stream-values.js");
+    for (const filter of ["data", /^data(?:\.|$)/]) {
+      for (const [open, close] of [['{"meta":', "}"], ["[", "]"]]) {
+        const document = open.repeat(1500) + "1" + close.repeat(1500);
+        await assert.rejects(pipeline(
+          Readable.from([document]),
+          factory.withParserAsStream({ filter }),
+          async (source) => { for await (const token of source) {} },
+        ), { name: "RangeError", message: /nesting depth exceeds maxDepth \(1024\)/ });
+      }
+    }
+    const values = [];
+    await pipeline(
+      Readable.from(['{"data":{"ok":true},"meta":2}']),
+      factory.withParserAsStream({ filter: "data" }),
+      streamValues.asStream(),
+      async (source) => { for await (const { value } of source) values.push(value); },
+    );
+    assert.deepEqual(values, name === "pick" ? [{ ok: true }]
+      : name === "filter" ? [{ data: { ok: true } }] : [{ meta: 2 }]);
+  });
+}
+
+function rpcStream(t, options = {}) {
+  const source = new PassThrough();
+  const destinations = [];
+  const calls = [];
+  const pipe = source.pipe.bind(source);
+  source.pipe = (destination, ...args) => {
+    destinations.push(destination);
+    return pipe(destination, ...args);
+  };
+  jayson.utils.parseStream(source, options, (error, value) => calls.push({ error, value }));
+  t.after(() => {
+    source.destroy();
+    for (const destination of destinations) destination.destroy();
+  });
+  return { source, destinations, calls };
+}
+
+async function parseRpcChunks(t, chunks, options) {
+  const state = rpcStream(t, options);
+  // The verifier consumes bytes without producing values; the parser's
+  // readable side is drained by Jayson's existing data listener.
+  const completion = state.destinations.map((stream, index) =>
+    finished(stream, { readable: index === 1 }).catch(() => {}));
+  for (const chunk of chunks) state.source.write(chunk);
+  state.source.end();
+  await Promise.all(completion);
+  return state.calls;
+}
+
+test("Jayson parses adjacent JSON values, split UTF-8, and revivers", { timeout: 10_000 }, async (t) => {
+  const input = [{ text: "€🪙", remove: true, nested: { count: 2 } }, [1, 2], null, true, 42, "text"];
+  const reviver = (key, value) => key === "remove" ? undefined : key === "count" ? value + 1 : value;
+  const bytes = Buffer.from(input.map((value) => JSON.stringify(value)).join("\n"));
+  const chunks = Array.from(bytes, (byte) => Buffer.from([byte]));
+  const calls = await parseRpcChunks(t, chunks, { reviver });
+  assert.ok(calls.every(({ error }) => error === null));
+  assert.deepEqual(calls.map(({ value }) => value), input.map((value) => JSON.parse(JSON.stringify(value), reviver)));
+  assert.deepEqual(await parseRpcChunks(t, [], {}), []);
+});
+
+test("Jayson stream parser retains support for deeply nested values without path filters", { timeout: 10_000 }, async (t) => {
+  const calls = await parseRpcChunks(t, ['{"meta":'.repeat(1500) + "1" + "}".repeat(1500)], {});
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].error, null);
+  let value = calls[0].value;
+  for (let depth = 0; depth < 1500; depth++) value = value.meta;
+  assert.equal(value, 1);
+});
+
+test("Jayson reports malformed and truncated streamed JSON once", { timeout: 10_000 }, async (t) => {
+  for (const input of ['{"broken":]', '{"unfinished":']) {
+    const calls = await parseRpcChunks(t, [input], {});
+    assert.equal(calls.length, 1);
+    assert.ok(calls[0].error instanceof Error);
+    assert.equal(calls[0].value, undefined);
+  }
+});
+
+test("Jayson forwards a source stream error once", async (t) => {
+  const { source, calls } = rpcStream(t);
+  const error = new Error("fixture socket failure");
+  source.destroy(error);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(calls, [{ error, value: undefined }]);
 });
 
 function tempDir(t) {
