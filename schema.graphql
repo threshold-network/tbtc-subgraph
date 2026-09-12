@@ -44,7 +44,7 @@ enum WormholeChain {
 #     include: [{ entity: "Redemption", fields: [{ name: "id" }] }]
 # )
 
-type Transaction @entity {
+type Transaction @entity(immutable: false) {
     id: ID!
     txHash: Bytes!
     timestamp: BigInt!
@@ -56,7 +56,7 @@ type Transaction @entity {
     redemptions: [Redemption!] @derivedFrom(field: "transactions")
 }
 
-type User @entity {
+type User @entity(immutable: false) {
     id: Bytes!
     mintingDebt: BigInt!
     tokenBalance: BigInt!
@@ -67,7 +67,7 @@ type User @entity {
     isRedeemerBanned: Boolean!
 }
 
-type Deposit @entity {
+type Deposit @entity(immutable: false) {
     #keccak256(fundingTxHash|fundingOutputIndex)
     id: Bytes!
     status: DepositStatus
@@ -104,7 +104,7 @@ type Deposit @entity {
     isRouted: Boolean
 }
 
-type Redemption @entity {
+type Redemption @entity(immutable: false) {
     #keccak256(keccak256(redeemerOutputScript) | walletPubKeyHash) + "-" + count
     id: ID!
     status: RedemptionStatus
@@ -126,7 +126,7 @@ type Redemption @entity {
 }
 
 # Track allowed Wormhole senders for cross-chain redemptions
-type WormholeSender @entity {
+type WormholeSender @entity(immutable: false) {
     id: ID!                         # Sender address (bytes32 as hex)
     chainId: Int!                   # Wormhole chain ID
     chain: WormholeChain!           # Human-readable chain
@@ -136,7 +136,7 @@ type WormholeSender @entity {
 }
 
 # Temporary tracker for linking VAA data to redemptions
-type CrossChainRedemptionTracker @entity {
+type CrossChainRedemptionTracker @entity(immutable: false) {
     id: ID!                         # Transaction hash
     sourceChainId: Int!             # Wormhole chain ID from VAA
     sourceChain: WormholeChain!     # Human-readable chain
@@ -155,7 +155,7 @@ enum WalletScheme {
     FROST
 }
 
-type Wallet @entity {
+type Wallet @entity(immutable: false) {
     # Canonical wallet ID. For legacy wallets, this is the left-padded walletPubKeyHash.
     id: Bytes!
     walletID: Bytes!
@@ -188,7 +188,7 @@ type Wallet @entity {
 # `handleEcdsaWalletCountSeeded` handler that uses
 # `event.params.totalAfterSeed` for idempotent absolute-set
 # (per Codex P2 feedback on the earlier C-1.1a iteration).
-type BridgeState @entity {
+type BridgeState @entity(immutable: false) {
     id: ID!
     # C-2: current default scheme used by `requestNewWallet`.
     # Defaults to ECDSA at C-2 activation. Updated by
@@ -205,7 +205,7 @@ type BridgeState @entity {
 # C-1 prep: append-only audit log of scheme flips. Each entry is
 # created by `handleNewWalletSchemeSet`; useful for governance
 # review.
-type WalletSchemeChange @entity {
+type WalletSchemeChange @entity(immutable: false) {
     id: ID!
     scheme: WalletScheme!
     changedAt: BigInt!
@@ -214,7 +214,7 @@ type WalletSchemeChange @entity {
 }
 
 
-type TBTCToken @entity{
+type TBTCToken @entity(immutable: false){
     "TBTCToken"
     id: ID!
     name: String!
@@ -244,7 +244,7 @@ enum TransactionEvent {
     WITHDRAW_REWARD
 }
 
-type Event @entity {
+type Event @entity(immutable: false) {
     #Hash of transaction
     id: ID!
     txHash: Bytes!
@@ -257,7 +257,7 @@ type Event @entity {
     operator: [Operator!] @derivedFrom(field: "events")
 }
 
-type GroupPublicKey @entity {
+type GroupPublicKey @entity(immutable: false) {
     # Group id
     id: ID!
     # Group public key
@@ -266,7 +266,7 @@ type GroupPublicKey @entity {
 
 }
 
-type RandomBeaconGroup @entity {
+type RandomBeaconGroup @entity(immutable: false) {
     id: ID!
     createdAt: BigInt!
     createdAtBlock: BigInt!
@@ -294,7 +294,7 @@ type RandomBeaconGroup @entity {
 """
 Represents the membership of an operator in a beacon group.
 """
-type RandomBeaconGroupMembership @entity {
+type RandomBeaconGroupMembership @entity(immutable: false) {
     #keccak256(group id , operator address)
     id: ID!
     group: RandomBeaconGroup!
@@ -308,7 +308,7 @@ type RandomBeaconGroupMembership @entity {
     groupCreatedAt: BigInt!
 }
 
-type RelayEntry @entity {
+type RelayEntry @entity(immutable: false) {
     "Request Id"
     id: ID!
     requestedAt: BigInt!
@@ -321,7 +321,7 @@ type RelayEntry @entity {
     isInProgress: Boolean!
 }
 
-type Operator @entity {
+type Operator @entity(immutable: false) {
     #Staking Provider address
     id: ID!
     #Operator address
@@ -387,7 +387,7 @@ enum State {
 """
 Exposes some global system statistics. Only a single record with the id "current" is available.
 """
-type StatsRecord @entity {
+type StatsRecord @entity(immutable: false) {
     id: ID!
 
     "The total number of stakers with a stake larger than 0."
@@ -406,7 +406,7 @@ type StatsRecord @entity {
 """
 Exposes some global system status data. Only a single record with the id "status" is available.
 """
-type StatusRecord @entity {
+type StatusRecord @entity(immutable: false) {
     id: ID!
 
     "The currently requested RandomBeacon relay entry, if any. Only a single request can exist at a time."

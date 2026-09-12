@@ -36,3 +36,6 @@ jobs:
         run: yarn codegen
       - name: Build subgraph manifest
         run: yarn run build-${{ inputs.network }}
+      - name: Check toolchain security and deployment compatibility
+        if: inputs.network == 'mainnet'
+        run: node --test scripts/check-toolchain.test.mjs
