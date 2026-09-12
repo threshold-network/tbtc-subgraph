@@ -69,18 +69,22 @@ An automated build-gate-and-deploy pipeline via GitHub Actions, modeled on
 
 - `ci-checks.yaml` — reusable (`workflow_call`), takes a `network` input. Installs deps
   (`yarn install --frozen-lockfile`), runs `yarn codegen`, then `yarn run build-<network>`. This
-  is the sole correctness gate for the subgraph build: the repo has no lint or test suite for the subgraph itself,
-  but ci.yaml now includes a cutover-tests job that runs a node:test-based regression suite for the cutover checker.
+  is the compile gate for mappings. The mainnet leg also runs
+  `node --test scripts/check-toolchain.test.mjs` for archive security and deployment protocol
+  compatibility using local mock endpoints. `ci.yaml` separately runs the cutover checker's
+  Node regression suite.
 - `ci.yaml` — triggers on `pull_request` and `push` to `master`. Matrix over
   `network: [sepolia, mainnet]`, each leg calling `ci-checks.yaml`.
 - `deploy-mainnet.yaml` — triggers on `push` of a `v*` tag. `checks` job (network: mainnet) then
   a `deploy` job scoped to the `production` GitHub Environment (requires manual reviewer
-  approval before the job starts), running the equivalent `graph deploy --studio tbtc-mainnet`
-  invocation.
+  approval before the job starts), running `graph deploy tbtc-mainnet` with the mainnet
+  network and tag's version label. Graph CLI 0.98.1 defaults to Studio and no longer accepts
+  `--studio`.
 - `osv-scan.yaml` — new. Mirrors `vba-dashboard`'s pattern using the
   `google/osv-scanner-action` reusable workflows (pinned to the same commit SHA vba-dashboard
-  uses): diff-aware scan on `pull_request` (fails only on vulnerabilities the PR introduces),
-  full scan on `push` to `master`. Points `--lockfile` at `./yarn.lock` instead of
+  uses): non-blocking diff-aware scan on `pull_request`, full scan on `push` to `master`.
+  Both retain `fail-on-vuln: false`; remaining scanner matches and their applicability are
+  documented in `docs/dependency-security.md`. Points `--lockfile` at `./yarn.lock` instead of
   `pnpm-lock.yaml`. Deny-all top-level `permissions: {}`, with each job granting only what the
   reusable workflow's declared ceiling requires (`actions: read`, `contents: read`,
   `security-events: write`; SARIF upload disabled since this repo has no code-scanning setup to
@@ -202,6 +206,13 @@ a re-set with `--env production`; no live deploy needed to validate the fix.
   (job log/artifact) without blocking merges. Tracked as follow-up debt: a `graph-cli` upgrade
   (separate, larger, needs its own live-deploy verification) is the real fix, not a resolutions
   hack applied here.
+
+  **Subsequent toolchain update:** Graph CLI 0.98.1 and the patched dependency resolutions
+  remove or patch the affected versions behind 70 of the 71 original alerts. The two
+  remaining scanner matches concern unused APIs; see `docs/dependency-security.md` for the
+  evidence. Both network builds and local deployment protocol tests pass; live Studio
+  validation remains part of the next actual subgraph release. These tooling fixes only
+  require a merge and updated dependency installs, not a release tag or redeployment.
 - **Open, unforced risk:** if the first `v*` tag is pushed before the `production` environment
   has a configured reviewer, the approval gate is a silent no-op and the mainnet deploy runs
   unattended. Mitigated: the reviewer was configured (see above) before any tag was pushed.

@@ -17,8 +17,40 @@ key, and reintroduce a `deploy-sepolia.yaml` workflow mirroring `deploy-mainnet.
 
 `ci.yaml` runs on every PR and push to `master`: it builds the manifest against both `sepolia`
 and `mainnet` networks (via the reusable `ci-checks.yaml`) as the compile gate for mappings,
-and runs the cutover checker's Node tests separately. Sepolia is exercised here purely to
-catch multi-network compile regressions; nothing deploys it anywhere.
+and runs the cutover checker's Node tests separately. The mainnet build also runs the
+toolchain security and deployment compatibility tests. The same tests run in the mainnet
+release's build gate. Sepolia is exercised here purely to catch multi-network compile
+regressions; nothing deploys it anywhere.
+
+## Toolchain setup and dependency fixes
+
+Use Node 22 and Yarn 1.22.22, matching CI. The repository pins Graph CLI 0.98.1 and
+`@graphprotocol/graph-ts` 0.31.0. Install from the committed `yarn.lock`:
+
+```sh
+yarn install --frozen-lockfile
+yarn codegen
+yarn build-mainnet
+yarn build-sepolia
+node --test scripts/check-toolchain.test.mjs scripts/check-cutover.test.mjs
+```
+
+Local network builds rewrite `subgraph.yaml`; review and restore their incidental changes
+before committing, as described in [Networks and addresses](#networks-and-addresses).
+The toolchain tests use temporary files, fake credentials, and local mock endpoints to
+check archive extraction and the CLI's upload/deployment protocol. They do not deploy to
+Studio. Live deployment, indexing, and consumer cutover are verified through the promotion
+path below.
+
+Graph CLI now defaults to Studio. The mainnet script uses `graph deploy tbtc-mainnet`;
+`--studio` is no longer supported. Use the version-tag workflow below for a production
+release so its mainnet network selection and approval gate apply.
+
+For the [Graph CLI dependency fixes](dependency-security.md), merging to `master` is
+sufficient: subsequent CI jobs install the patched tooling, and developers should pull
+and reinstall with `yarn install --frozen-lockfile`. These fixes do not require a release
+tag, subgraph redeployment, reindexing, or consumer cutover. Changes to deployed mappings,
+schema behavior, or other deployment artifacts still follow the promotion path.
 
 ## Promotion path
 
