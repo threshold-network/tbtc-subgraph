@@ -54,7 +54,7 @@ jobs:
             echo "::group::Deploy attempt $attempt"
             set +e
             output=$(npx --no-install graph deploy \
-              --studio tbtc-mainnet \
+              tbtc-mainnet \
               --deploy-key "$GRAPH_DEPLOY_KEY" \
               --version-label "${{ github.ref_name }}" \
               --network mainnet 2>&1)

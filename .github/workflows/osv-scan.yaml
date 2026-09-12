@@ -5,19 +5,10 @@ name: OSV-Scanner
 # permissions are deny-all, each job opts into only the minimum scopes it
 # needs. Mirrors tlabs-xyz/vba-dashboard's osv-scan.yaml, adapted for yarn.
 #
-# fail-on-vuln is false on both jobs: at bootstrap this scan found 19
-# packages / 69 known vulnerabilities, all inherited transitives of
-# graph-cli 0.61.0 itself (axios 0.21.4, tar 6.2.1, protobufjs 6.11.6,
-# uuid 3.4.0/8.3.2, request 2.88.2, etc.) — pre-existing debt that only
-# became visible now because this is the first commit with a lockfile at
-# all, not something this pipeline introduced. Several fixes are major
-# version bumps embedded in graph-cli's own IPFS/protobuf runtime; forcing
-# yarn resolutions on them without a live Studio deploy to catch a
-# regression is a separate, higher-risk effort (likely a graph-cli
-# upgrade), not something to force through this gate. The scan stays
-# active and its findings stay visible in the job log/artifact so the debt
-# doesn't go untracked — it just doesn't block merges until that upgrade
-# happens.
+# The Graph CLI upgrade removes the original vulnerable dependency tree.
+# Scans remain non-blocking because uuid and stream-json still match
+# advisories for APIs this toolchain does not call. Keep findings visible;
+# docs/dependency-security.md records the exact exclusions and evidence.
 
 on:
   pull_request:
