@@ -102,6 +102,26 @@ type Deposit @entity(immutable: false) {
     l1Sender: Bytes
     # True once a routed DepositInitialized/DepositFinalized has attached here.
     isRouted: Boolean
+
+    # --- Treasury fee context ---
+    # `Bridge.depositParameters().depositTreasuryFeeDivisor` as it stood in the
+    # block this deposit was revealed in. Without it, `treasuryFee: 0` is
+    # ambiguous: it means either "the protocol charged no fee at the time" or
+    # "this depositor's fee was waived", and a consumer cannot tell which.
+    #
+    #   treasuryFee 0, divisor 0    -> no fee regime; nothing was waived
+    #   treasuryFee 0, divisor > 0  -> a genuine full waiver
+    #   treasuryFee below expected  -> a partial waiver
+    #
+    # Null means the divisor could not be read at that block (the call reverted),
+    # which is deliberately distinct from a real zero, so a failed read is never
+    # mistaken for "the protocol charged nothing".
+    #
+    # Mainnet switched the fee on around 2026-04-15: no deposit before that date
+    # carries a fee, and every one after is amount/500 apart from waived ones.
+    # Consumers should read this field rather than hardcode that date, which
+    # would break the next time governance changes the divisor.
+    treasuryFeeDivisorAtReveal: BigInt
 }
 
 type Redemption @entity(immutable: false) {

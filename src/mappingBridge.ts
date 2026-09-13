@@ -177,6 +177,20 @@ export function handleDepositRevealed(event: DepositRevealed): void {
     } else {
         deposit.treasuryFee = depositsCall.value.treasuryFee
     }
+    // Recorded alongside the fee so a consumer can tell a waived fee from one
+    // the protocol never charged. Guarded for the same reason as the call
+    // above: an unreadable divisor must degrade to null, not halt indexing.
+    let depositParametersCall = bridgeContract.try_depositParameters()
+    if (depositParametersCall.reverted) {
+        log.warning(
+            "handleDepositRevealed: Bridge.depositParameters reverted at block {}; leaving treasuryFeeDivisorAtReveal null",
+            [event.block.number.toString()]
+        )
+    } else {
+        // (dustThreshold, treasuryFeeDivisor, txMaxFee, revealAheadPeriod)
+        deposit.treasuryFeeDivisorAtReveal = depositParametersCall.value.value1
+    }
+
     deposit.walletPubKeyHash = event.params.walletPubKeyHash
     deposit.fundingTxHash = event.params.fundingTxHash
     deposit.fundingOutputIndex = event.params.fundingOutputIndex
