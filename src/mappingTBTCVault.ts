@@ -61,7 +61,17 @@ export function handleOptimisticMintingFinalized(
     // Divisor used to compute the treasury fee taken from each
     ///         optimistically minted deposit and transferred to the treasury
     ///         upon finalization of the optimistic mint.
-    let feeDivisor = tBTCVaultContract.optimisticMintingFeeDivisor()
+    // A zero divisor already means "no optimistic minting fee" in the branch
+    // below, so an unreadable divisor degrades to that rather than halting the
+    // subgraph on an unguarded call.
+    let feeDivisorCall = tBTCVaultContract.try_optimisticMintingFeeDivisor()
+    if (feeDivisorCall.reverted) {
+        log.warning(
+            "handleOptimisticMintingFinalized: TBTCVault.optimisticMintingFeeDivisor reverted at block {}; treating the fee as zero",
+            [event.block.number.toString()]
+        )
+    }
+    let feeDivisor = feeDivisorCall.reverted ? Const.ZERO_BI : feeDivisorCall.value
 
     // Bridge, when sweeping, cuts a deposit treasury fee and splits
     // Bitcoin miner fee for the sweep transaction evenly between the

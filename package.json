@@ -13,7 +13,8 @@
     "deploy-mainnet": "graph deploy tbtc-mainnet",
     "create-local": "graph create --node http://localhost:8020/ suntzu93/threshold-tbtc-goerli",
     "remove-local": "graph remove --node http://localhost:8020/ suntzu93/threshold-tbtc-goerli",
-    "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 suntzu93/tbtcv2"
+    "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 suntzu93/tbtcv2",
+    "check-guarded-calls": "node scripts/check-guarded-calls.mjs"
   },
   "dependencies": {
     "@graphprotocol/graph-cli": "0.98.1",
