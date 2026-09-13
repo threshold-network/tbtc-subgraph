@@ -130,12 +130,29 @@ export function handleDkgResultSubmitted(event: DkgResultSubmitted): void {
     let memberIds = event.params.result.members
 
     let randomBeaconContract = RandomBeacon.bind(event.address)
-    // Get Sortition contract
-    let sortitionPoolAddr = randomBeaconContract.sortitionPool()
-    // Bind sortition contract
-    let sortitionPoolContract = SortitionPool.bind(sortitionPoolAddr)
-    // Get list members address by member ids
-    let members = sortitionPoolContract.getIDOperators(memberIds)
+    // Membership enrichment is best effort: a reverted read costs this group its
+    // member list, while an unguarded one would abort the mapping and halt the
+    // whole subgraph. Empty members simply leaves the loops below with nothing
+    // to do, and the group and status entities are still written.
+    let members: Address[] = []
+    let sortitionPoolCall = randomBeaconContract.try_sortitionPool()
+    if (sortitionPoolCall.reverted) {
+        log.warning(
+            "handleDkgResultSubmitted: RandomBeacon.sortitionPool reverted at block {}; skipping member enrichment",
+            [event.block.number.toString()]
+        )
+    } else {
+        let sortitionPoolContract = SortitionPool.bind(sortitionPoolCall.value)
+        let membersCall = sortitionPoolContract.try_getIDOperators(memberIds)
+        if (membersCall.reverted) {
+            log.warning(
+                "handleDkgResultSubmitted: SortitionPool.getIDOperators reverted at block {}; skipping member enrichment",
+                [event.block.number.toString()]
+            )
+        } else {
+            members = membersCall.value
+        }
+    }
 
     let memberSeats: Map<string, i32[]> = new Map()
     let uniqueAddresses: string[] = []; // Map does not allow us to list entries?
@@ -153,7 +170,15 @@ export function handleDkgResultSubmitted(event: DkgResultSubmitted): void {
 
     for (let i = 0; i < uniqueAddresses.length; i++) {
         let memberAddress = uniqueAddresses[i]
-        let stakingProvider = randomBeaconContract.operatorToStakingProvider(Address.fromString(memberAddress))
+        let stakingProviderCall = randomBeaconContract.try_operatorToStakingProvider(Address.fromString(memberAddress))
+        if (stakingProviderCall.reverted) {
+            log.warning(
+                "handleDkgResultSubmitted: RandomBeacon.operatorToStakingProvider reverted for {} at block {}; skipping this member",
+                [memberAddress, event.block.number.toString()]
+            )
+            continue
+        }
+        let stakingProvider = stakingProviderCall.value
         let operator = getOrCreateOperator(stakingProvider)
         operator.beaconGroupCount += 1;
         operator.save()
@@ -365,11 +390,21 @@ export function handleRewardsWithdrawn(event: RewardsWithdrawn): void {
     eventEntity.save()
 
     let randomContract = RandomBeacon.bind(event.address);
-    let availableReward = randomContract.availableRewards(event.params.stakingProvider)
+    let availableRewardCall = randomContract.try_availableRewards(event.params.stakingProvider)
 
     let operator = getOrCreateOperator(event.params.stakingProvider)
+    // The withdrawn amount comes from the event, so the running total stays
+    // correct even when the remaining-balance read is unavailable. Only the
+    // balance itself is left at its previous value.
     operator.rewardDispensed = operator.rewardDispensed.plus(event.params.amount);
-    operator.availableReward = availableReward
+    if (availableRewardCall.reverted) {
+        log.warning(
+            "handleRewardsWithdrawn: RandomBeacon.availableRewards reverted for {} at block {}; keeping the previous balance",
+            [event.params.stakingProvider.toHexString(), event.block.number.toString()]
+        )
+    } else {
+        operator.availableReward = availableRewardCall.value
+    }
 
     let events = operator.events
     events.push(eventEntity.id)
