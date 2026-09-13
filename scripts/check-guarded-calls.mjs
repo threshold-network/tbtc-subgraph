@@ -32,9 +32,14 @@ const mappingsDir = path.join(repoRoot, "src");
 // Names bound via `X.bind(...)` are contract handles; a call on one of them is
 // what we police. Tracking the actual binding avoids flagging every unrelated
 // method call in the file (entity `.save()`, `BigInt.fromI32()`, and so on).
-const BIND_RE = /\b(?:let|const|var)\s+([A-Za-z_$][\w$]*)\s*=\s*[A-Za-z_$][\w$]*\.bind\s*\(/g;
+const IDENTIFIER = String.raw`[A-Za-z_$][\w$]*`;
+const QUALIFIED_NAME = String.raw`${IDENTIFIER}(?:\s*\.\s*${IDENTIFIER})*`;
+const BIND_RE = new RegExp(
+  String.raw`\b(?:let|const|var)\s+(${IDENTIFIER})\s*(?::\s*${QUALIFIED_NAME})?\s*=\s*${QUALIFIED_NAME}\s*\.\s*bind\s*\(`,
+  "g",
+);
 // A call on a bound handle: `handle.method(`. `try_` prefixed ones are fine.
-const CALL_RE = /\b([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\s*\(/g;
+const CALL_RE = /\b([A-Za-z_$][\w$]*)\s*\.\s*([A-Za-z_$][\w$]*)\s*\(/g;
 
 // Reads on a handle that cannot revert, so they need no guard.
 const SAFE_METHODS = new Set(["bind", "toString", "toHexString", "toHex"]);
@@ -49,15 +54,78 @@ async function listMappingFiles(dir) {
   return out.sort();
 }
 
-// Strips comments and string literals so a `.foo(` inside either cannot be
-// mistaken for a call. Newlines are preserved so line numbers stay accurate.
+// Mask comments and literal text while preserving executable ${...} expressions,
+// including nested templates. Scan in source order so comment markers inside a
+// string cannot consume real code. Offsets and newlines remain unchanged.
 function stripNoise(source) {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
-    .replace(/\/\/[^\n]*/g, (m) => " ".repeat(m.length))
-    .replace(/"(?:[^"\\\n]|\\.)*"/g, (m) => " ".repeat(m.length))
-    .replace(/'(?:[^'\\\n]|\\.)*'/g, (m) => " ".repeat(m.length))
-    .replace(/`(?:[^`\\]|\\.)*`/g, (m) => m.replace(/[^\n]/g, " "));
+  const clean = source.split("");
+  let index = 0;
+
+  function mask(count = 1) {
+    for (let n = 0; n < count && index < source.length; n++, index++) {
+      if (source[index] !== "\n" && source[index] !== "\r") clean[index] = " ";
+    }
+  }
+
+  function quoted(quote) {
+    mask();
+    while (index < source.length) {
+      if (source[index] === "\\") {
+        mask(2);
+      } else if (source[index] === quote) {
+        mask();
+        return;
+      } else {
+        mask();
+      }
+    }
+  }
+
+  function template() {
+    mask();
+    while (index < source.length) {
+      if (source[index] === "\\") {
+        mask(2);
+      } else if (source[index] === "`") {
+        mask();
+        return;
+      } else if (source[index] === "$" && source[index + 1] === "{") {
+        mask(2);
+        code(true);
+      } else {
+        mask();
+      }
+    }
+  }
+
+  function code(interpolation = false) {
+    let braces = 0;
+    while (index < source.length) {
+      const char = source[index];
+      const next = source[index + 1];
+      if (char === '"' || char === "'") {
+        quoted(char);
+      } else if (char === "`") {
+        template();
+      } else if (char === "/" && next === "/") {
+        while (index < source.length && source[index] !== "\n" && source[index] !== "\r") mask();
+      } else if (char === "/" && next === "*") {
+        mask(2);
+        while (index < source.length && !(source[index] === "*" && source[index + 1] === "/")) mask();
+        mask(2);
+      } else if (interpolation && char === "}" && braces === 0) {
+        mask();
+        return;
+      } else {
+        if (char === "{") braces++;
+        if (char === "}") braces--;
+        index++;
+      }
+    }
+  }
+
+  code();
+  return clean.join("");
 }
 
 function findUnguarded(source, relPath) {

@@ -115,6 +115,13 @@ export function handleDkgResultSubmitted(event: DkgResultSubmitted): void {
     }
 
     let memberIds = event.params.result.members
+    // Slot and member counts are known from the event even if enrichment fails.
+    let uniqueMemberIds = new Set<string>()
+    for (let i = 0; i < memberIds.length; i++) {
+        uniqueMemberIds.add(memberIds[i].toString())
+    }
+    group.size = memberIds.length
+    group.uniqueMemberCount = uniqueMemberIds.size
 
     let walletRegistry = WalletRegistry.bind(event.address)
     // Best effort, as in the RandomBeacon handler: a reverted read costs this
@@ -179,8 +186,6 @@ export function handleDkgResultSubmitted(event: DkgResultSubmitted): void {
         membership.save()
 
     }
-    group.uniqueMemberCount = uniqueAddresses.length
-    group.size = members.length
     group.save()
 
     let groupPubKey = GroupPublicKey.load("ecdsa_" + event.transaction.hash.toHex())

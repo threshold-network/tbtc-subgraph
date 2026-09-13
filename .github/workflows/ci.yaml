@@ -33,6 +33,8 @@ jobs:
         with:
           node-version: '22'
       # Standard library only, so no install step and no lockfile dependency.
+      - name: Test guarded-call detection and DKG member counts
+        run: node --test scripts/check-guarded-calls.test.mjs scripts/dkg-members.test.mjs
       - name: Check every contract call is guarded
         run: node scripts/check-guarded-calls.mjs
   checks:
