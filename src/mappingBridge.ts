@@ -78,9 +78,7 @@ function deriveLegacyWalletID(walletPubKeyHash: Bytes): Bytes {
 const SCHEME_ECDSA = "ECDSA"
 const SCHEME_FROST = "FROST"
 
-// Singleton BridgeState id; the entity tracks the post-#431/#434/
-// #435/#439 governance state that doesn't map cleanly to per-wallet
-// records.
+// Singleton BridgeState id for governance state shared across deposits and wallets.
 const BRIDGE_STATE_ID = "singleton"
 
 function getOrCreateBridgeState(): BridgeState {
@@ -135,6 +133,9 @@ function saveWalletRegistration(
 export function handleDepositParametersUpdated(
     event: DepositParametersUpdated
 ): void {
+    let state = getOrCreateBridgeState()
+    state.depositTreasuryFeeDivisor = event.params.depositTreasuryFeeDivisor
+    state.save()
 }
 
 export function handleDepositRevealed(event: DepositRevealed): void {
@@ -177,18 +178,15 @@ export function handleDepositRevealed(event: DepositRevealed): void {
     } else {
         deposit.treasuryFee = depositsCall.value.treasuryFee
     }
-    // Recorded alongside the fee so a consumer can tell a waived fee from one
-    // the protocol never charged. Guarded for the same reason as the call
-    // above: an unreadable divisor must degrade to null, not halt indexing.
-    let depositParametersCall = bridgeContract.try_depositParameters()
-    if (depositParametersCall.reverted) {
+    // Snapshot the state at this event. An eth_call reads end-of-block state,
+    // which may include a governance update AFTER this reveal in the same block.
+    let state = getOrCreateBridgeState()
+    deposit.treasuryFeeDivisorAtReveal = state.depositTreasuryFeeDivisor
+    if (state.depositTreasuryFeeDivisor === null) {
         log.warning(
-            "handleDepositRevealed: Bridge.depositParameters reverted at block {}; leaving treasuryFeeDivisorAtReveal null",
+            "handleDepositRevealed: deposit treasury fee divisor is unseeded at block {}; leaving treasuryFeeDivisorAtReveal null",
             [event.block.number.toString()]
         )
-    } else {
-        // (dustThreshold, treasuryFeeDivisor, txMaxFee, revealAheadPeriod)
-        deposit.treasuryFeeDivisorAtReveal = depositParametersCall.value.value1
     }
 
     deposit.walletPubKeyHash = event.params.walletPubKeyHash
@@ -252,6 +250,18 @@ export function handleGovernanceTransferred(
 }
 
 export function handleInitialized(event: Initialized): void {
+    // Bridge.initialize sets 2000 without a DepositParametersUpdated event.
+    // Both configured networks start at the proxy deployment block, including
+    // Initialized(1). Later governance updates are replayed in event order.
+    // Reinitializers must not reset the divisor. See docs/treasury-fee-divisor.md.
+    if (event.params.version != 1) {
+        return
+    }
+    let state = getOrCreateBridgeState()
+    if (state.depositTreasuryFeeDivisor === null) {
+        state.depositTreasuryFeeDivisor = BigInt.fromI32(2000)
+        state.save()
+    }
 }
 
 export function handleMovedFundsSweepTimedOut(

@@ -18,6 +18,7 @@ dataSources:
       entities:
         - Deposit
         - Redemption
+        - BridgeState
       abis:
         - name: Bridge
           file: ./abis/Bridge.json

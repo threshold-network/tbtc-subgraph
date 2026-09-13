@@ -104,8 +104,9 @@ type Deposit @entity(immutable: false) {
     isRouted: Boolean
 
     # --- Treasury fee context ---
-    # `Bridge.depositParameters().depositTreasuryFeeDivisor` as it stood in the
-    # block this deposit was revealed in. Without it, `treasuryFee: 0` is
+    # The deposit treasury fee divisor at this reveal's position in event order,
+    # seeded by Initialized(1) and tracked via DepositParametersUpdated.
+    # Without it, `treasuryFee: 0` is
     # ambiguous: it means either "the protocol charged no fee at the time" or
     # "this depositor's fee was waived", and a consumer cannot tell which.
     #
@@ -113,9 +114,9 @@ type Deposit @entity(immutable: false) {
     #   treasuryFee 0, divisor > 0  -> a genuine full waiver
     #   treasuryFee below expected  -> a partial waiver
     #
-    # Null means the divisor could not be read at that block (the call reverted),
-    # which is deliberately distinct from a real zero, so a failed read is never
-    # mistaken for "the protocol charged nothing".
+    # Null means neither initialization nor a parameter update has been indexed.
+    # This is deliberately distinct from a real zero, so missing history is
+    # never mistaken for "the protocol charged nothing".
     #
     # Mainnet switched the fee on around 2026-04-15: no deposit before that date
     # carries a fee, and every one after is amount/500 apart from waived ones.
@@ -210,6 +211,9 @@ type Wallet @entity(immutable: false) {
 # (per Codex P2 feedback on the earlier C-1.1a iteration).
 type BridgeState @entity(immutable: false) {
     id: ID!
+    # Current value in event order. Seeded to the Bridge initializer's 2000 on
+    # Initialized(1), then updated by DepositParametersUpdated. Null until seeded.
+    depositTreasuryFeeDivisor: BigInt
     # C-2: current default scheme used by `requestNewWallet`.
     # Defaults to ECDSA at C-2 activation. Updated by
     # `handleNewWalletSchemeSet`.
