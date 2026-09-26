@@ -14,6 +14,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  mapping-tests:
+    name: Bridge mapping tests
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '22'
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      - run: yarn codegen
+      - run: yarn test:manifests
+      - run: yarn test:mappings
   cutover-tests:
     name: Cutover checker tests
     runs-on: ubuntu-latest
