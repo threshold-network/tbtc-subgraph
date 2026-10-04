@@ -1,5 +1,9 @@
 # Deployment
 
+For the Explorer migration from the deprecated custom indexer, also follow the
+[rebate staking cutover guide](rebate-staking.md). Its schema must be live through
+the public proxy before the dependent frontend release.
+
 The subgraph deploys to The Graph Studio. One Studio subgraph exists — `tbtc-mainnet`
 (production) — with its own Studio deploy key.
 

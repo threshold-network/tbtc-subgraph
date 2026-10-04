@@ -581,3 +581,36 @@ dataSources:
             address,uint256,uint256)
           handler: handleLegacyRoutedDepositFinalized
       file: ./src/mappingRoutedDeposit.ts
+
+  - kind: ethereum
+    name: RebateStaking
+    network: mainnet
+    source:
+      abi: RebateStaking
+      address: "0x0184739C32edc3471D3e4860c8E39a5f3Ff85A45"
+      startBlock: 23598704
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - RebateStaker
+        - RebateStakingEvent
+        - RebateStakingStats
+      abis:
+        - name: RebateStaking
+          file: ./abis/RebateStaking.json
+      eventHandlers:
+        - event: Staked(address,uint256)
+          handler: handleStaked
+        - event: UnstakeStarted(address,uint256)
+          handler: handleUnstakeStarted
+        - event: UnstakeFinished(address,uint256)
+          handler: handleUnstakeFinished
+        - event: RebateReceived(address,uint64)
+          handler: handleRebateReceived
+        - event: RebateCanceled(address,uint256)
+          handler: handleRebateCanceled
+        - event: TransferFinished(address,address)
+          handler: handleTransferFinished
+      file: ./src/mappingRebateStaking.ts
