@@ -95,6 +95,7 @@ export function getOrCreateOperatorEvent(event: ethereum.Event, status: string):
         eventEntity.from = event.transaction.from
         eventEntity.txHash = event.transaction.hash
         eventEntity.to = event.transaction.to
+        eventEntity.contract = event.address
         eventEntity.timestamp = event.block.timestamp
         eventEntity.event = status
         eventEntity.amount = constants.ZERO_BI
@@ -107,13 +108,10 @@ export function getStats(): StatsRecord {
     let stats = StatsRecord.load("current")
     if (stats == null) {
         stats = new StatsRecord("current")
-        stats.numOperators = 0
         stats.numDeposits = 0
         stats.numRedemptions = 0
-        stats.totalTBTCAuthorizedAmount = constants.ZERO_BI
-        stats.totalRandomBeaconAuthorizedAmount = constants.ZERO_BI
-        stats.numOperatorsRegisteredNode = 0
-        stats.totalStaked = constants.ZERO_BI
+        stats.totalTBTCAuthorizationWeight = constants.ZERO_BI
+        stats.totalRandomBeaconAuthorizationWeight = constants.ZERO_BI
         stats.mintingStatus = true
     }
     return stats as StatsRecord
@@ -137,15 +135,10 @@ export function getOrCreateOperator(address: Address): Operator {
     if (!operator) {
         operator = new Operator(address.toHexString())
         operator.address = constants.ADDRESS_ZERO
-        operator.registeredOperatorAddress = 0
-        operator.isBondRegisteredOperatorAddress = false
-        operator.stakedAt = constants.ZERO_BI
-        operator.stakeType = 0
         operator.randomBeaconAuthorized = false
         operator.tBTCAuthorized = false
-        operator.tBTCAuthorizedAmount = constants.ZERO_BI
-        operator.randomBeaconAuthorizedAmount = constants.ZERO_BI
-        operator.stakedAmount = constants.ZERO_BI
+        operator.tBTCAuthorizationWeight = constants.ZERO_BI
+        operator.randomBeaconAuthorizationWeight = constants.ZERO_BI
         operator.availableReward = constants.ZERO_BI
         operator.rewardDispensed = constants.ZERO_BI
         operator.totalSlashedAmount = constants.ZERO_BI
@@ -155,6 +148,24 @@ export function getOrCreateOperator(address: Address): Operator {
         operator.events = []
     }
     return operator as Operator
+}
+
+// Use the previously indexed value rather than event.fromAmount. An application
+// migration can report an increase from zero while we still have its old value.
+export function updateAuthorizationWeight(operator: Operator, weight: BigInt, isRandomBeacon: boolean): void {
+    let stats = getStats()
+    if (isRandomBeacon) {
+        stats.totalRandomBeaconAuthorizationWeight = stats.totalRandomBeaconAuthorizationWeight
+            .minus(operator.randomBeaconAuthorizationWeight).plus(weight)
+        operator.randomBeaconAuthorizationWeight = weight
+        operator.randomBeaconAuthorized = weight.gt(constants.ZERO_BI)
+    } else {
+        stats.totalTBTCAuthorizationWeight = stats.totalTBTCAuthorizationWeight
+            .minus(operator.tBTCAuthorizationWeight).plus(weight)
+        operator.tBTCAuthorizationWeight = weight
+        operator.tBTCAuthorized = weight.gt(constants.ZERO_BI)
+    }
+    stats.save()
 }
 
 export function getOrCreateRandomBeaconGroup(id: string): RandomBeaconGroup {

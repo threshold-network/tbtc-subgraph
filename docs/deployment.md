@@ -22,8 +22,8 @@ key, and reintroduce a `deploy-sepolia.yaml` workflow mirroring `deploy-mainnet.
 `ci.yaml` runs on every PR and push to `master`: it builds the manifest against both `sepolia`
 and `mainnet` networks (via the reusable `ci-checks.yaml`) as the compile gate for mappings,
 and runs the cutover checker's Node tests separately. The mainnet build also runs the
-toolchain security and deployment compatibility tests. The same tests run in the mainnet
-release's build gate. Sepolia is exercised here purely to catch multi-network compile
+mapping regression tests and the toolchain security and deployment compatibility tests.
+The same tests run in the mainnet release's build gate. Sepolia is exercised here purely to catch multi-network compile
 regressions; nothing deploys it anywhere.
 
 ## Toolchain setup and dependency fixes
@@ -34,6 +34,7 @@ Use Node 22 (at least 22.13.0) and Yarn 1.22.22, matching CI. The repository pin
 ```sh
 yarn install --frozen-lockfile
 yarn codegen
+yarn test
 yarn build-mainnet
 yarn build-sepolia
 node --test scripts/check-toolchain.test.mjs scripts/check-cutover.test.mjs
@@ -117,6 +118,9 @@ and retain it for rollback.
 > of the live upstream.
 
 ## Consumer cutover
+
+For the breaking operator staking cleanup, also follow the
+[operator staking retirement checklist](operator-staking-retirement.md).
 
 The only known consumer of this subgraph is the **`api.threshold.network` Cloudflare Worker**
 in [`tlabs-xyz/threshold-api`](https://github.com/tlabs-xyz/threshold-api), which proxies
