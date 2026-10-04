@@ -229,16 +229,11 @@ type TBTCToken @entity(immutable: false){
 }
 
 enum TransactionEvent {
-    STAKED,
-    TOPUP,
-    UNSTAKE,
     AUTHORIZED_RANDOM_BEACON,
     AUTHORIZED_TBTC,
-    AUTHORIZED_UNKNOW,
     DECREASE_AUTHORIZED_RANDOM_BEACON,
     DECREASE_AUTHORIZED_TBTC,
     REGISTERED_OPERATOR,
-    BOND_OPERATOR,
     JOINED_SORTITION_POOL,
     SLASHED,
     WITHDRAW_REWARD
@@ -251,7 +246,12 @@ type Event @entity(immutable: false) {
     timestamp: BigInt!
     from: Bytes!
     to: Bytes
+    "The emitting contract; transaction.to can be a router or another contract."
+    contract: Bytes!
+    "Raw event amount: authorization units, reward units, or reported seizure amount."
     amount: BigInt!
+    "Set only for TokensSeized telemetry."
+    discrepancy: Boolean
     isRandomBeaconEvent: Boolean!
     event: TransactionEvent!
     operator: [Operator!] @derivedFrom(field: "events")
@@ -279,6 +279,7 @@ type RandomBeaconGroup @entity(immutable: false) {
     uniqueMemberCount: Int!
     "Total fault."
     misbehavedCount: Int!
+    "Sum of emitted slashing amounts; symbolic telemetry after economic slashing was retired."
     totalSlashedAmount: BigInt!
     terminated: Boolean!
 
@@ -324,31 +325,25 @@ type RelayEntry @entity(immutable: false) {
 type Operator @entity(immutable: false) {
     #Staking Provider address
     id: ID!
-    #Operator address
+    # Most recently observed registered or joined operator address.
     address: Bytes!
-    registeredOperatorAddress: Int!
-
-    "registered operator address use PreApplication"
-    isBondRegisteredOperatorAddress: Boolean!
-    "When this operator had a stake delegated to them. This is like a createdAt, and the operation also assigns the beneficiary/authorizer roles."
-    stakedAt: BigInt!
-    stakeType: Int!
+    "Application-specific operator identities, independent of token stakes."
+    randomBeaconOperator: Bytes
+    walletRegistryOperator: Bytes
+    "Timestamp of the first indexed OperatorRegistered event."
+    registeredAt: BigInt
 
     randomBeaconGroupMemberships: [RandomBeaconGroupMembership!]! @derivedFrom(field: "operator")
 
-    # The other "staker" roles.
-    owner: Bytes
-    beneficiary: Bytes
-    authorizer: Bytes
-
-    # Authorizations
+    # True when the latest reported authorization value is nonzero.
+    # A decrease request is reported immediately; these are not an eligibility check.
     randomBeaconAuthorized: Boolean!
     tBTCAuthorized: Boolean!
 
-    # Statistics
-    tBTCAuthorizedAmount: BigInt!
-    randomBeaconAuthorizedAmount: BigInt!
-    stakedAmount: BigInt!
+    "Latest reported authorization value, including decrease requests. Historical token-era units or DAO allowlist weights; not a token balance."
+    tBTCAuthorizationWeight: BigInt!
+    "Latest reported authorization value, including decrease requests; not a token balance."
+    randomBeaconAuthorizationWeight: BigInt!
 
     "Total reward withdrew"
     rewardDispensed : BigInt!
@@ -358,6 +353,7 @@ type Operator @entity(immutable: false) {
 
     "How often this operator was involved in a fault."
     misbehavedCount: Int!
+    "Sum of emitted application slashing amounts; symbolic telemetry after economic slashing was retired."
     totalSlashedAmount: BigInt!
 
     "Duration of the sortition pool rewards ban imposed on operators  who misbehaved"
@@ -390,15 +386,13 @@ Exposes some global system statistics. Only a single record with the id "current
 type StatsRecord @entity(immutable: false) {
     id: ID!
 
-    "The total number of stakers with a stake larger than 0."
-    numOperators: Int!
     numDeposits: Int!
     numRedemptions: Int!
-    numOperatorsRegisteredNode: Int!
 
-    totalTBTCAuthorizedAmount: BigInt!
-    totalRandomBeaconAuthorizedAmount: BigInt!
-    totalStaked: BigInt!
+    "Sum of operators' latest reported tBTC authorization values, not staked tokens."
+    totalTBTCAuthorizationWeight: BigInt!
+    "Sum of operators' latest reported beacon authorization values, not staked tokens."
+    totalRandomBeaconAuthorizationWeight: BigInt!
 
     "True is not pause"
     mintingStatus: Boolean!

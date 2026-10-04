@@ -34,7 +34,7 @@ import {RandomBeaconGroup, RelayEntry, GroupPublicKey, RandomBeaconGroupMembersh
 
 import {
     getOrCreateOperator,
-    getStats,
+    updateAuthorizationWeight,
     getOrCreateOperatorEvent,
     getStatus, getOrCreateRandomBeaconGroup
 } from "./utils/helper"
@@ -42,51 +42,32 @@ import {
 import * as Const from "./utils/constants"
 import {getBeaconGroupId, keccak256TwoString} from "./utils/utils";
 
-export function handleAuthorizationDecreaseRequested(
-    event: AuthorizationDecreaseRequested
-): void {
+export function handleAuthorizationDecreaseRequested(event: AuthorizationDecreaseRequested): void {
     let operator = getOrCreateOperator(event.params.stakingProvider)
-    operator.randomBeaconAuthorizedAmount = event.params.toAmount
-    //minimum to authorize is 40k
-    if (event.params.toAmount.le(BigInt.fromI32(40000 * 10 ^ 18))) {
-        operator.randomBeaconAuthorized = false
-    }
-
+    updateAuthorizationWeight(operator, event.params.toAmount, true)
     let eventEntity = getOrCreateOperatorEvent(event, "DECREASE_AUTHORIZED_RANDOM_BEACON")
     eventEntity.amount = event.params.fromAmount.minus(event.params.toAmount)
+    eventEntity.isRandomBeaconEvent = true
     eventEntity.save()
-    //Add event info into operator
+
     let events = operator.events
     events.push(eventEntity.id)
     operator.events = events
-    operator.save();
-
-    let changeAmount = event.params.fromAmount.minus(event.params.toAmount)
-    let stats = getStats()
-    stats.totalRandomBeaconAuthorizedAmount = stats.totalRandomBeaconAuthorizedAmount.minus(changeAmount)
-    stats.save()
+    operator.save()
 }
 
-export function handleAuthorizationIncreased(
-    event: AuthorizationIncreased
-): void {
+export function handleAuthorizationIncreased(event: AuthorizationIncreased): void {
+    let operator = getOrCreateOperator(event.params.stakingProvider)
+    updateAuthorizationWeight(operator, event.params.toAmount, true)
     let eventEntity = getOrCreateOperatorEvent(event, "AUTHORIZED_RANDOM_BEACON")
     eventEntity.amount = event.params.toAmount.minus(event.params.fromAmount)
+    eventEntity.isRandomBeaconEvent = true
     eventEntity.save()
 
-    let operator = getOrCreateOperator(event.params.stakingProvider)
-    operator.randomBeaconAuthorized = true
-    operator.randomBeaconAuthorizedAmount = event.params.toAmount;
-    //Add event info into operator
     let events = operator.events
     events.push(eventEntity.id)
     operator.events = events
-    operator.save();
-
-    let changeAmount = event.params.toAmount.minus(event.params.fromAmount)
-    let stats = getStats()
-    stats.totalRandomBeaconAuthorizedAmount = stats.totalRandomBeaconAuthorizedAmount.plus(changeAmount)
-    stats.save()
+    operator.save()
 }
 
 export function handleDkgMaliciousResultSlashed(
@@ -235,38 +216,26 @@ export function handleOperatorJoinedSortitionPool(
     let events = operator.events
     events.push(eventEntity.id)
     operator.events = events
+    operator.address = event.params.operator
+    operator.randomBeaconOperator = event.params.operator
     operator.save();
 }
 
-/**
- * stakingProvider = msg.owner
- * source : https://github.com/keep-network/keep-core/blob/b95b8f487e5474659efb8f85e567a6f06a7f0c80/solidity/random-beacon/contracts/libraries/BeaconAuthorization.sol
- *
- * This is confusing, if one wallet staking with another stakingProvider
- * then stakingProvider != msg.owner does.
- *
- * @param event
- */
 export function handleOperatorRegistered(event: OperatorRegistered): void {
     let operator = getOrCreateOperator(event.params.stakingProvider)
-    if (operator.stakedAt != Const.ZERO_BI && operator.stakedAmount != Const.ZERO_BI) {
-        let eventEntity = getOrCreateOperatorEvent(event, "REGISTERED_OPERATOR")
-        eventEntity.save()
+    let eventEntity = getOrCreateOperatorEvent(event, "REGISTERED_OPERATOR")
+    eventEntity.isRandomBeaconEvent = true
+    eventEntity.save()
 
-        operator.registeredOperatorAddress += 1
-        operator.address = event.params.operator
-        let events = operator.events
-        events.push(eventEntity.id)
-        operator.events = events
-
-        if (!operator.isBondRegisteredOperatorAddress && operator.registeredOperatorAddress == 2) {
-            let stats = getStats();
-            stats.numOperatorsRegisteredNode += 1
-            stats.save()
-        }
-
-        operator.save();
+    operator.address = event.params.operator
+    operator.randomBeaconOperator = event.params.operator
+    if (!operator.registeredAt) {
+        operator.registeredAt = event.block.timestamp
     }
+    let events = operator.events
+    events.push(eventEntity.id)
+    operator.events = events
+    operator.save()
 }
 
 
