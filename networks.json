@@ -55,6 +55,10 @@
     "StarkNetDepositor": {
       "address": "0x40c74a5f0b0e6CC3Ae4E8dD2Db46d372504445DA",
       "startBlock": 8509896
+    },
+    "RebateStaking": {
+      "address": "0x0000000000000000000000000000000000000000",
+      "startBlock": 0
     }
   },
   "mainnet": {
@@ -113,6 +117,10 @@
     "StarkNetDepositor": {
       "address": "0xC9031f76006da0BD4bFa9E02aDf0d448dB3BC155",
       "startBlock": 22671770
+    },
+    "RebateStaking": {
+      "address": "0x0184739C32edc3471D3e4860c8E39a5f3Ff85A45",
+      "startBlock": 23598704
     }
   }
 }

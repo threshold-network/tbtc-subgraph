@@ -3,7 +3,7 @@
 # check also runs the mapping regression tests.
 # Used by ci.yaml (PR + master, both networks) and by deploy-mainnet.yaml's own
 # `checks` job (mainnet only, matching that deploy target).
-# Cutover checker regression tests run separately in ci.yaml.
+# Cutover, guarded-call, and DKG handler regression tests run separately in ci.yaml.
 name: CI Checks
 
 on:
@@ -36,6 +36,9 @@ jobs:
         run: yarn codegen
       - name: Build subgraph manifest
         run: yarn run build-${{ inputs.network }}
+      - name: Check deposit divisor event ordering
+        if: inputs.network == 'mainnet'
+        run: node --experimental-vm-modules --test scripts/check-deposit-divisor.test.mjs
       - name: Test mappings
         if: inputs.network == 'mainnet'
         run: yarn test
