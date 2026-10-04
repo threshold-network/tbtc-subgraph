@@ -1,3 +1,52 @@
+"User fee-rebate staking, distinct from operator TokenStaking."
+type RebateStaker @entity(immutable: false) {
+    id: Bytes!
+    stakedAmount: BigInt!
+    pendingUnstakeAmount: BigInt!
+    "Lifetime RebateReceived amounts, in satoshis (including subsequently canceled rebates)."
+    totalRebatesReceived: BigInt!
+    rebateCount: Int!
+    eventCount: Int!
+    firstStakedAt: BigInt
+    lastStakedAt: BigInt
+    events: [RebateStakingEvent!]! @derivedFrom(field: "staker")
+}
+
+enum RebateStakingEventType {
+    STAKED
+    UNSTAKE_STARTED
+    UNSTAKE_FINISHED
+    REBATE_RECEIVED
+    REBATE_CANCELED
+    TRANSFERRED_IN
+    TRANSFERRED_OUT
+}
+
+type RebateStakingEvent @entity(immutable: true) {
+    "Transaction hash + log index + staker; transfers create one record per participant."
+    id: Bytes!
+    staker: RebateStaker!
+    eventType: RebateStakingEventType!
+    "T base units for stake events; satoshis for rebates; null for cancellations."
+    amount: BigInt
+    blockNumber: BigInt!
+    timestamp: BigInt!
+    transactionHash: Bytes!
+    "Block number shifted by 32 bits plus log index, for chronological pagination."
+    sequence: BigInt!
+    requestedAt: BigInt
+}
+
+type RebateStakingStats @entity(immutable: false) {
+    id: ID!
+    totalStakers: Int!
+    activeStakers: Int!
+    "Includes pending unstaking until UnstakeFinished, matching getStake."
+    totalStaked: BigInt!
+    "Lifetime RebateReceived amounts in satoshis."
+    totalRebatesDistributed: BigInt!
+}
+
 enum DepositStatus {
     UNKNOWN
     REVEALED #-> bridge.revealDeposit() / DepositRevealed event
