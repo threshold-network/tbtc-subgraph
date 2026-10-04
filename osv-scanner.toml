@@ -1,0 +1,8 @@
+# OSV scans package versions, not the installed patch. Do not ignore the package:
+# other advisories must still fail. CI and deploy tests exercise every installed
+# braces copy; postinstall applies the patch with --error-on-fail.
+# Remove this exception and the patch when an official fixed release is adopted.
+[[IgnoredVulns]]
+id = "GHSA-vfj7-8cjw-p6xm"
+ignoreUntil = 2026-11-04
+reason = "braces 3.0.3 is patched by patches/braces+3.0.3.patch, backporting the five security-only lib diffs from upstream PR #72 at 28d440b5dd449dbf1fe6f3506cf94ecca4d02660. scripts/check-glob-security.test.mjs verifies every installed copy through the shared CI/deploy gate. See docs/dependency-security.md."

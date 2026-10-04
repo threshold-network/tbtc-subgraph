@@ -3,7 +3,9 @@
 The September 2026 dependency updates replace Graph CLI 0.61.0 with
 0.98.1 and remove or patch the affected versions behind all 71 original
 Dependabot alerts. They also patch stream-json alert #73, which appeared
-after the CLI upgrade. No alerts or advisories are dismissed or suppressed.
+after the CLI upgrade. The October update below addresses newly published
+glob-library advisories, including one temporary exception for a locally
+patched package that has no official fixed release.
 
 These packages run in the Node.js build/deployment tooling. The subgraph's
 mapping library remains pinned to `@graphprotocol/graph-ts` 0.31.0. Fixing
@@ -78,10 +80,58 @@ stream-json versions directly. The regression tests resolve packages through
 the CLI's actual Jayson dependency, so installing an unused patched copy
 cannot satisfy the checks.
 
-Yarn audit reports zero advisories for this lockfile as of September 2026.
-Both OSV workflows now use `fail-on-vuln: true`, with no advisory exceptions:
+Yarn audit reported zero advisories for this lockfile in September 2026.
+Both OSV workflows use `fail-on-vuln: true`:
 pull requests scan dependency changes, and pushes to master scan the full
 lockfile. A future finding fails the scan and requires investigation.
+
+## October 2026 glob-library advisories
+
+The full scan after merging PRs #22–25 found ten package/advisory instances
+in dependency versions that already existed before those PRs. The dependencies
+run in Node installation/build/deployment tooling; they are not part of the
+deployed WASM mappings. Exploitation requires a hostile pattern to reach the
+glob libraries. Tooling-only scope is not used as a reason to ignore them.
+
+The lockfile updates `brace-expansion` within each existing major:
+`1.1.18 → 1.1.21`, `2.1.4 → 2.1.7`, and `5.0.9 → 5.0.12`. These versions fix
+[comma-pattern stack exhaustion](https://github.com/advisories/GHSA-6j4f-fj2g-mc7p),
+[nested-pattern stack exhaustion](https://github.com/advisories/GHSA-qhr7-859c-m2p7),
+and [quadratic rewriting](https://github.com/advisories/GHSA-q2hr-2g5m-vwhr).
+
+`braces` 3.0.3 has no official fixed release for
+[GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm).
+`patches/braces+3.0.3.patch` backports only the five `lib/` diffs from
+[upstream proposed PR #72 at 28d440b5dd449dbf1fe6f3506cf94ecca4d02660](https://github.com/micromatch/braces/pull/72/commits/28d440b5dd449dbf1fe6f3506cf94ecca4d02660).
+This is an independently reviewed/tested downstream backport of an open PR,
+not a released upstream fix. It excludes unrelated unreleased parser changes.
+
+The patch rejects structural nesting above 100 for both braces and parentheses
+before recursive processing. Guards also cover caller-supplied ASTs in
+`compile`, `expand`, and `stringify`, including cyclic expansion parent links.
+Options can lower the limit but cannot disable or increase the hard cap.
+Literal braces inside escaping, quotes, and character classes retain their
+existing behavior, as do ordinary ranges, matching, and `escapeInvalid` output.
+Excessive nesting produces an explicit validation error; normal patterns are
+unchanged. Existing `patch-package --error-on-fail` applies the backport during
+installation and fails if it cannot apply.
+
+OSV's version-only scan cannot see this source patch. `osv-scanner.toml` therefore
+excepts only this advisory (and its OSV aliases), expiring **2026-11-04**. It does
+not ignore the `braces` package or disable either vulnerability gate. OSV's
+advisory exception format cannot additionally select a package/version;
+`scripts/check-glob-security.test.mjs` verifies the expected 3.0.3 version and
+depth guards in **every installed braces copy**, including nested copies.
+Those tests are imported by the existing toolchain test suite, so they run in
+the mainnet CI build and release deployment gate. Unpatched nested copies fail.
+Raw `yarn audit` continues to report the patched advisory; do not describe that
+raw result as zero vulnerabilities or dismiss the corresponding GitHub alert.
+
+Before expiry, adopt an official fixed release and remove the patch/exception,
+or re-review the backport and record any justified extension. The existing
+full OSV scan still fails for all other advisories. Reproduce the local gate with
+`osv-scanner scan source --lockfile=./yarn.lock`; use an empty `--config` file to
+inspect the underlying unfiltered result.
 
 ## Compatibility and validation
 
@@ -104,8 +154,9 @@ node --test scripts/check-toolchain.test.mjs scripts/check-cutover.test.mjs
 yarn audit
 ```
 
-The audit exits successfully with no known advisories. Toolchain tests
-exercise UUID buffer rejection, all four streaming filters' depth limits,
+The raw audit reports the locally patched `braces` advisory described above;
+the full OSV scan applies its explicit, expiring disposition. Toolchain tests
+exercise glob nesting/rewriting limits, UUID buffer rejection, all four streaming filters' depth limits,
 Jayson's streamed JSON and error handling, archive extraction, and the CLI
 deployment protocol. They use temporary files, fake credentials, and local
 mock endpoints. They do not publish a subgraph or prove live Studio service
