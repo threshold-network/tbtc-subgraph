@@ -4,7 +4,7 @@
 # check deposit divisor snapshots against ordered governance events.
 # Used by ci.yaml (PR + master, both networks) and by deploy-mainnet.yaml's own
 # `checks` job (mainnet only, matching that deploy target).
-# Cutover checker regression tests run separately in ci.yaml.
+# Cutover, guarded-call, and DKG handler regression tests run separately in ci.yaml.
 name: CI Checks
 
 on:
