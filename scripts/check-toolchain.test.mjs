@@ -19,6 +19,7 @@ import { PassThrough, Readable } from "node:stream";
 import { finished, pipeline } from "node:stream/promises";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import "./check-glob-security.test.mjs";
 
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 const require = createRequire(import.meta.url);
