@@ -133,9 +133,18 @@ full OSV scan still fails for all other advisories. Reproduce the local gate wit
 `osv-scanner scan source --lockfile=./yarn.lock`; use an empty `--config` file to
 inspect the underlying unfiltered result.
 
+## October 21, 2026 Node.js security release
+
+CI and deployment tooling use Node 22.23.4, which includes the
+[October security fixes](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases).
+The separately installed Undici package is also resolved to 7.30.1 for
+[GHSA-qrxm-fqhp-jwvm](https://github.com/nodejs/undici/security/advisories/GHSA-qrxm-fqhp-jwvm);
+updating Node alone does not replace this npm dependency. These changes affect
+build, deployment, and monitoring tooling; the deployed WASM mappings are unchanged.
+
 ## Compatibility and validation
 
-Use Node 22 (at least 22.13.0) and Yarn 1.22.22, matching CI. `yarn.lock` is the committed
+Use Node 22.23.4 and Yarn 1.22.22, matching CI. `yarn.lock` is the committed
 dependency source; `package-lock.json` is ignored by this repository.
 
 CLI 0.98.1 defaults to Studio, so the removed `--studio` flag is dropped from
