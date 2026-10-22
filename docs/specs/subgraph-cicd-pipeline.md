@@ -99,7 +99,7 @@ An automated build-gate-and-deploy pipeline via GitHub Actions, modeled on
   `actions/setup-node`, `google/osv-scanner-action`'s reusable workflows), matching
   `vba-dashboard`'s supply-chain hygiene bar. Same SHAs reused where the same action version
   applies.
-- Node 22, pinned to major version (`'22'`) so CI picks up maintained patches. The
+- Node 22.23.4, pinned to the October 2026 security release. The
   repository's `engines` field requires at least 22.13.0 for Jayson's CommonJS imports
   of the patched ESM streaming dependency. Installation applies the committed patch
   automatically and fails if it cannot apply.

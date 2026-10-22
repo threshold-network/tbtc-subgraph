@@ -28,7 +28,7 @@ regressions; nothing deploys it anywhere.
 
 ## Toolchain setup and dependency fixes
 
-Use Node 22 (at least 22.13.0) and Yarn 1.22.22, matching CI. The repository pins Graph CLI 0.98.1 and
+Use Node 22.23.4 and Yarn 1.22.22, matching CI. The repository pins Graph CLI 0.98.1 and
 `@graphprotocol/graph-ts` 0.31.0. Install from the committed `yarn.lock`:
 
 ```sh
