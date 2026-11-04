@@ -17,7 +17,10 @@
 //   FAIL      either endpoint reports indexing errors
 //   PASS      healthy hashes match; the release is live
 //   PASS      healthy Studio is still indexing; cutover is not due yet (prints progress)
+//   FAIL      Studio has been "still indexing" past the staleness ceiling -> sync stalled
 //   FAIL      Studio is synced but production serves a different hash -> cutover pending
+//   PASS      Studio has no resolvable deployment yet, but the tag is within the
+//             post-tag approval grace window -> not yet a failure
 //   FAIL      the Studio version no longer resolves -> check missing/archived version
 //   FAIL      either endpoint is unreachable or malformed
 //
@@ -44,13 +47,14 @@ const STUDIO_QUERY_BASE =
   "https://api.studio.thegraph.com/query/59264/tbtc-mainnet";
 const NETWORK = process.env.NETWORK ?? "mainnet";
 // Parses a config env var as a finite non-negative integer, falling back to `fallback`
-// (itself trusted, always one of the literal defaults below) when unset. Rejects NaN,
-// Infinity, negative values, and fractions loudly instead of letting them silently
+// (itself trusted, always one of the literal defaults below) when unset or empty. Rejects
+// NaN, Infinity, negative values, and fractions loudly instead of letting them silently
 // neutralize a comparison (e.g. a non-numeric STILL_INDEXING_CEILING_SECONDS would make
 // `tagAgeSeconds > NaN` always false, masking a genuinely stalled deployment forever).
+// `Number("")` is 0, not NaN, so an empty (but set) env var must be treated as unset too.
 function parseNonNegativeInt(name, fallback) {
   const raw = process.env[name];
-  if (raw === undefined) return fallback;
+  if (raw === undefined || raw === "") return fallback;
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed < 0) {
     throw new Error(`${name} must be a non-negative integer, got: ${raw}`);
@@ -61,28 +65,14 @@ function parseNonNegativeInt(name, fallback) {
 // How far behind the live deployment the new one may be while still counting as "caught
 // up" (SYNC_LAG_TOLERANCE_BLOCKS); an HTTP request budget (REQUEST_TIMEOUT_MS); a
 // post-tag approval grace window (TAG_APPROVAL_GRACE_SECONDS, 2h default); and a
-// still-indexing staleness ceiling (STILL_INDEXING_CEILING_SECONDS, 7d default). Parsed
-// eagerly (not lazily inside main()) so a misconfiguration is reported through the same
-// report()/step-summary path as every other failure below, rather than crashing with a
-// raw stack trace before report() is ever called.
+// still-indexing staleness ceiling (STILL_INDEXING_CEILING_SECONDS, 7d default). Declared
+// here, assigned as the first statements in main() so a misconfiguration is reported
+// through the same report()/step-summary path (and the same top-level .catch below) as
+// every other failure, rather than crashing with a raw stack trace before main() runs.
 let SYNC_LAG_TOLERANCE_BLOCKS;
 let REQUEST_TIMEOUT_MS;
 let TAG_APPROVAL_GRACE_SECONDS;
 let STILL_INDEXING_CEILING_SECONDS;
-let configOk = true;
-try {
-  SYNC_LAG_TOLERANCE_BLOCKS = parseNonNegativeInt("SYNC_LAG_TOLERANCE_BLOCKS", 300);
-  REQUEST_TIMEOUT_MS = parseNonNegativeInt("REQUEST_TIMEOUT_MS", 20000);
-  TAG_APPROVAL_GRACE_SECONDS = parseNonNegativeInt("TAG_APPROVAL_GRACE_SECONDS", 7200);
-  STILL_INDEXING_CEILING_SECONDS = parseNonNegativeInt("STILL_INDEXING_CEILING_SECONDS", 604800);
-} catch (error) {
-  // `report` is a hoisted function declaration further down this file; calling it here,
-  // during initial module evaluation, is safe.
-  report({ status: "fail", headline: `Invalid configuration: ${error.message}`, details: [] });
-  console.log(`::error::Invalid configuration: ${error.message}`);
-  process.exitCode = 1;
-  configOk = false;
-}
 
 const META_QUERY = "{ _meta { deployment block { number } hasIndexingErrors } }";
 
@@ -282,6 +272,11 @@ function report({ status, headline, details }) {
 }
 
 async function main() {
+  SYNC_LAG_TOLERANCE_BLOCKS = parseNonNegativeInt("SYNC_LAG_TOLERANCE_BLOCKS", 300);
+  REQUEST_TIMEOUT_MS = parseNonNegativeInt("REQUEST_TIMEOUT_MS", 20000);
+  TAG_APPROVAL_GRACE_SECONDS = parseNonNegativeInt("TAG_APPROVAL_GRACE_SECONDS", 7200);
+  STILL_INDEXING_CEILING_SECONDS = parseNonNegativeInt("STILL_INDEXING_CEILING_SECONDS", 604800);
+
   const releaseTag = resolveReleaseTag();
   const studioUrl = `${STUDIO_QUERY_BASE}/${releaseTag}`;
 
@@ -337,7 +332,7 @@ async function main() {
     if (tagAgeSeconds !== null && tagAgeSeconds < TAG_APPROVAL_GRACE_SECONDS) {
       report({
         status: "pass",
-        headline: `${releaseTag} has no Studio deployment yet — within the ${TAG_APPROVAL_GRACE_SECONDS}s post-tag approval window, not yet a failure.`,
+        headline: `${releaseTag} has no resolvable Studio deployment yet — within the ${TAG_APPROVAL_GRACE_SECONDS}s post-tag approval window, not yet a failure.`,
         details: [
           `studio: ${studioUrl}`,
           `production is serving: ${prod.deployment} (block ${prod.block.toLocaleString()})`,
@@ -451,15 +446,13 @@ async function main() {
   return 1;
 }
 
-if (configOk) {
-  main()
-    .then((code) => {
-      process.exitCode = code;
-    })
-    .catch((error) => {
-      // #10: Also call report so a step summary always exists
-      report({ status: "fail", headline: `Cutover check failed to run: ${error.message}`, details: [] });
-      console.log(`::error::Cutover check failed to run: ${error.message}`);
-      process.exitCode = 1;
-    });
-}
+main()
+  .then((code) => {
+    process.exitCode = code;
+  })
+  .catch((error) => {
+    // #10: Also call report so a step summary always exists
+    report({ status: "fail", headline: `Cutover check failed to run: ${error.message}`, details: [] });
+    console.log(`::error::Cutover check failed to run: ${error.message}`);
+    process.exitCode = 1;
+  });
